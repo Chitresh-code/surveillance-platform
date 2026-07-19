@@ -42,6 +42,7 @@ services:
       dockerfile: services/api/Dockerfile
     environment:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-surveillance}:${POSTGRES_PASSWORD:-surveillance}@metadata-db:5432/${POSTGRES_DB:-surveillance}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-dev-only-change-me-to-a-random-32-byte-value}
     ports:
       - "8000:8000"
     depends_on:

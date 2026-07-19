@@ -75,3 +75,23 @@ class Sighting(Base):
     match_confidence: Mapped[float] = mapped_column(Float, nullable=False)
 
     identity: Mapped[Identity] = relationship(back_populates="sightings")
+
+
+class Operator(Base):
+    __tablename__ = "operators"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    username: Mapped[str] = mapped_column(String, nullable=False, unique=True)
+    password_hash: Mapped[str] = mapped_column(String, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class AuditLog(Base):
+    __tablename__ = "audit_log"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    operator_id: Mapped[str] = mapped_column(ForeignKey("operators.id"), nullable=False)
+    action: Mapped[str] = mapped_column(String, nullable=False)
+    resource_type: Mapped[str] = mapped_column(String, nullable=False)
+    resource_id: Mapped[str] = mapped_column(String, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

@@ -11,7 +11,7 @@ This is the contract for the REST API described in docs/ARCHITECTURE.md. It's wr
 - List endpoints are paginated with `limit` (default 50, max 200) and `cursor` query params; responses include a `next_cursor` (`null` when there's no more data).
 - Filtering on list endpoints uses query params named after the field (`camera_id`, `identity_id`, `from`, `to`).
 - Errors use a consistent envelope (see §5) and standard HTTP status codes.
-- Auth mechanism is not yet decided — see docs/DECISIONS.md. Until it lands, assume every endpoint requires a bearer token and treat the API as running behind a private network boundary in development.
+- Every endpoint except `POST /auth/login` requires `Authorization: Bearer <token>` (docs/DECISIONS.md ADR-0010). A missing or invalid token gets a 401 with `error.code` of `unauthorized`.
 
 ## 2. Resources
 
@@ -25,6 +25,12 @@ This is the contract for the REST API described in docs/ARCHITECTURE.md. It's wr
 | `Event` | A queryable, denormalized view over sightings for the API's read side. |
 
 ## 3. Endpoints
+
+### Auth
+
+| Method | Path | Purpose |
+|---|---|---|
+| POST | `/auth/login` | Exchange an operator's username/password for a bearer token (12h expiry). The only endpoint that doesn't itself require one. |
 
 ### Cameras
 
@@ -109,6 +115,24 @@ This is the contract for the REST API described in docs/ARCHITECTURE.md. It's wr
 }
 ```
 
+**`POST /auth/login`**
+
+```json
+{
+  "username": "operator1",
+  "password": "correct-horse-battery-staple"
+}
+```
+
+Response:
+
+```json
+{
+  "access_token": "eyJhbGciOi...",
+  "token_type": "bearer"
+}
+```
+
 ## 5. Error format
 
 ```json
@@ -128,6 +152,6 @@ Breaking changes get a new base path (`/api/v2`); additive changes (new optional
 
 ## 7. Open items
 
-- Auth scheme (docs/DECISIONS.md).
 - Whether `Event` is a real stored table or a view computed from `Sighting` — implementation detail, doesn't change this contract either way.
-- Rate limiting policy for integrator API keys.
+- Rate limiting on `/auth/login` and on API usage generally — not built yet (docs/DECISIONS.md ADR-0010's consequences).
+- Operator account management (create/list/deactivate operators via the API instead of the `create_operator` CLI script) — docs/GAPS.md item 2.

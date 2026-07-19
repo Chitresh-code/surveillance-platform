@@ -39,21 +39,31 @@ docker compose up --build
 
 This brings up `metadata-db` (Postgres), `frame-queue` (Redis), a one-off `migrate` job that applies Alembic migrations, then `api`, `ingestion`, `detection`, `reid`, and `frontend`. The API is at `http://localhost:8000/api/v1`, the map UI at `http://localhost:5173`.
 
+Every endpoint except `POST /auth/login` requires a bearer token (docs/DECISIONS.md ADR-0010). Create an operator and log in:
+
+```sh
+docker compose exec api uv run python -m api.create_operator alice a-strong-password
+
+TOKEN=$(curl -s -X POST http://localhost:8000/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username": "alice", "password": "a-strong-password"}' | python3 -c "import sys, json; print(json.load(sys.stdin)['access_token'])")
+```
+
 Register a camera and start streaming it:
 
 ```sh
 curl -X POST http://localhost:8000/api/v1/cameras \
-  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
   -d '{"name": "Lobby North", "lat": 12.9716, "lon": 77.5946, "stream_url": "rtsp://camera-host/lobby-north"}'
 
-curl -X POST http://localhost:8000/api/v1/cameras/{camera_id}/stream/start
+curl -X POST http://localhost:8000/api/v1/cameras/{camera_id}/stream/start -H "Authorization: Bearer $TOKEN"
 ```
 
 Tracks and their detections then land under `GET /api/v1/cameras/{camera_id}/tracks` and `GET /api/v1/tracks/{track_id}/detections`. Once a track closes, `reid` matches it against known identities:
 
 ```sh
-curl http://localhost:8000/api/v1/identities
-curl http://localhost:8000/api/v1/identities/{identity_id}/sightings
+curl http://localhost:8000/api/v1/identities -H "Authorization: Bearer $TOKEN"
+curl http://localhost:8000/api/v1/identities/{identity_id}/sightings -H "Authorization: Bearer $TOKEN"
 ```
 
 Operators can correct a matching mistake with `POST /api/v1/identities/{identity_id}/merge` (fold another identity into this one) or `POST /api/v1/identities/{identity_id}/split` (detach a track into a new identity). Full contract in [docs/API_SPEC.md](docs/API_SPEC.md).
@@ -61,14 +71,14 @@ Operators can correct a matching mistake with `POST /api/v1/identities/{identity
 `GET /api/v1/events` gives the same sightings as a filterable, cross-camera feed (`camera_id`, `identity_id`, `from`, `to` query params); `GET /api/v1/map/cameras` and `GET /api/v1/map/activity` are what the map UI polls for markers and the recent-activity overlay:
 
 ```sh
-curl "http://localhost:8000/api/v1/events?camera_id={camera_id}"
-curl http://localhost:8000/api/v1/map/cameras
-curl http://localhost:8000/api/v1/map/activity
+curl "http://localhost:8000/api/v1/events?camera_id={camera_id}" -H "Authorization: Bearer $TOKEN"
+curl http://localhost:8000/api/v1/map/cameras -H "Authorization: Bearer $TOKEN"
+curl http://localhost:8000/api/v1/map/activity -H "Authorization: Bearer $TOKEN"
 ```
 
 ### Map UI
 
-`docker compose up --build` builds and serves `frontend/` at `http://localhost:5173` (nginx serving the Vite production build, API base URL baked in at build time via the `VITE_API_BASE_URL` build arg). For local dev with hot reload instead:
+`docker compose up --build` builds and serves `frontend/` at `http://localhost:5173` (nginx serving the Vite production build, API base URL baked in at build time via the `VITE_API_BASE_URL` build arg). It opens on a login screen, use an operator created with `api.create_operator` (see above); there's no self-service signup yet. For local dev with hot reload instead:
 
 ```sh
 cd frontend
@@ -79,7 +89,7 @@ npm run dev
 
 ### API collection
 
-[`postman/surveillance-platform.postman_collection.json`](postman/surveillance-platform.postman_collection.json) mirrors [docs/API_SPEC.md](docs/API_SPEC.md); import it into Postman and set the `base_url` collection variable if not running on the default port.
+[`postman/surveillance-platform.postman_collection.json`](postman/surveillance-platform.postman_collection.json) mirrors [docs/API_SPEC.md](docs/API_SPEC.md); import it into Postman, set the `base_url` collection variable if not running on the default port, and set `operator_username`/`operator_password` to an operator created with `api.create_operator`. Run the **Auth → Login** request first, it sets the `access_token` collection variable that every other request authenticates with.
 
 ### Testing with your own camera
 
@@ -94,10 +104,10 @@ Put your phone on the same LAN as wherever `ingestion` runs, start the app, and 
 
 ```sh
 curl -X POST http://localhost:8000/api/v1/cameras \
-  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
   -d '{"name": "My Phone", "lat": 12.9716, "lon": 77.5946, "stream_url": "http://<phone-ip>:8080/video"}'
 
-curl -X POST http://localhost:8000/api/v1/cameras/{camera_id}/stream/start
+curl -X POST http://localhost:8000/api/v1/cameras/{camera_id}/stream/start -H "Authorization: Bearer $TOKEN"
 ```
 
 No code changes needed, this works today.
@@ -110,9 +120,9 @@ Docker Desktop can't pass a host webcam into a container, so `ingestion` has to 
 docker compose up --build metadata-db frame-queue migrate api detection reid frontend   # skip `ingestion`
 
 curl -X POST http://localhost:8000/api/v1/cameras \
-  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
   -d '{"name": "Laptop Webcam", "lat": 12.9716, "lon": 77.5946, "stream_url": "0"}'
-curl -X POST http://localhost:8000/api/v1/cameras/{camera_id}/stream/start
+curl -X POST http://localhost:8000/api/v1/cameras/{camera_id}/stream/start -H "Authorization: Bearer $TOKEN"
 
 cd services/ingestion
 DATABASE_URL=postgresql+psycopg://surveillance:surveillance@localhost:5432/surveillance \

@@ -4,29 +4,29 @@ Phase 4 (docs/PRD.md §10) closes out the PRD's original scope: ingestion, track
 
 This is a backlog, not a committed roadmap like docs/PRD.md §10. Pulling an item here into a real phase means writing an ADR first if it needs a stack choice (per CLAUDE.md), same as any other phase.
 
-## 1. No auth, API or UI
+## 1. No auth, API or UI — fixed
 
-**Gap**: The API has no token checking at all; `CORSMiddleware` is wide open (`allow_origins=["*"]`). docs/API_SPEC.md §7 already flags this as an open item ("assume every endpoint requires a bearer token... until it lands"), but nothing enforces it. There's no login in the map UI either: it's a static bundle, anyone who can reach it can reach the API behind it.
+**Gap**: The API had no token checking at all; `CORSMiddleware` was wide open. There was no login in the map UI either. docs/DECISIONS.md ADR-0010 closes this: `POST /auth/login` issues a JWT against a new `operators` table, and a `current_operator` FastAPI dependency gates every other endpoint, enforced once in `services/api/api/main.py` rather than per-route. The map UI now has a `/login` route (`frontend/src/Login.tsx`) and redirects there when unauthenticated or when a request 401s.
 
-**Why it matters**: This is the gap everything else sits behind. Every identity's movement history, every camera's `stream_url` (which can embed credentials), every merge/split correction is readable and writable by anyone on the network. Blocks real deployment outright, not a polish item.
+**Why it matters**: This was the gap everything else sat behind. Every identity's movement history, every camera's `stream_url`, every merge/split correction was readable and writable by anyone on the network.
 
-**Next step**: ADR for the auth mechanism (bearer token / API key for integrators, session-based login for the UI; docs/PRD.md §11 already poses this as "operator accounts vs. API keys vs. both"). Enforced once, as a FastAPI dependency, not per-route. Do this first: items 2 and 3 below are pointless to build behind an open door.
+**Next step**: No self-service signup or operator management exists yet, operators are created with `uv run python -m api.create_operator <username> <password>` (see item 2). No rate limiting on `/auth/login`, no refresh token (a session hard-expires at 12h).
 
 ## 2. No management dashboard
 
-**Gap**: Camera registration, stream start/stop, and identity merge/split only exist as raw API calls (curl/Postman). `POST /identities/{id}/merge` and `/split` are explicitly "operator correction" endpoints per docs/API_SPEC.md §3, they exist *for* a human, but there's no screen for that human.
+**Gap**: Camera registration, stream start/stop, and identity merge/split only exist as raw API calls (curl/Postman). `POST /identities/{id}/merge` and `/split` are explicitly "operator correction" endpoints per docs/API_SPEC.md §3, they exist *for* a human, but there's no screen for that human. Operator account creation is in the same boat: a CLI script (`api.create_operator`), not a screen.
 
 **Why it matters**: Nobody can actually operate this system without reading the API spec and writing curl commands. The whole point of FR-6 (operator corrections) is a human catching a bad match, which requires a UI to review sightings in the first place.
 
-**Next step**: Camera CRUD screen, stream start/stop controls, and an identity review screen (sightings list + merge/split actions) in `frontend/`. Depends on item 1 (auth) and item 3 (routing) landing first.
+**Next step**: Camera CRUD screen, stream start/stop controls, an identity review screen (sightings list + merge/split actions), and operator management, in `frontend/`. Its two former blockers, auth and routing, are both in place now (item 1, item 3), so this is unblocked, just not built.
 
-## 3. UI is map-only, no landing page or navigation
+## 3. UI is map-only, no landing page or navigation — partially fixed
 
-**Gap**: ADR-0009 deliberately scoped the frontend to a single map view with no router: "if the UI grows beyond a map and a couple of list views... this ADR gets revisited with a router." It just did, per item 2.
+**Gap**: ADR-0009 deliberately scoped the frontend to a single map view with no router: "if the UI grows beyond a map and a couple of list views... this ADR gets revisited with a router." ADR-0010 did exactly that, for auth: `react-router-dom` now routes between `/login` and `/` (the map). There's still only one real screen behind the login, item 2's camera/identity/operator screens don't exist yet.
 
-**Why it matters**: A camera list, an identity review screen, and a map are three screens minimum. Without a router and a shell (nav, layout), each new screen becomes its own bolted-on special case.
+**Why it matters**: A camera list, an identity review screen, and a map are three screens minimum. The router and a `RequireAuth` guard now exist (`frontend/src/App.tsx`), so adding those screens is additive, not a restructure.
 
-**Next step**: Add a router (React Router is the obvious default, but this is a real ADR-0009 revision, not a given) and a shared app shell once item 2's screens are actually being built, not before.
+**Next step**: Add the screens themselves, and a shared nav/shell once there's more than one authenticated screen to switch between. Tracked as item 2.
 
 ## 4. No frame/embedding retention or garbage collection
 
@@ -52,13 +52,13 @@ This is a backlog, not a committed roadmap like docs/PRD.md §10. Pulling an ite
 
 **Next step**: Add pipeline/replay and contract (`postman/` via `newman`) jobs to `.github/workflows/test.yml`, gated on merge to `main` per docs/TESTING.md §4, once those tests themselves are written.
 
-## 7. No privacy/compliance controls
+## 7. No privacy/compliance controls — partially fixed
 
-**Gap**: This system stores face/body embeddings and cross-camera movement history for identifiable people, with no consent flow, no audit log of who queried which identity, and no data-deletion path beyond raw SQL. docs/PRD.md §7's Privacy NFR names the requirement; nothing implements it yet.
+**Gap**: This system stores face/body embeddings and cross-camera movement history for identifiable people, with no consent flow and no data-deletion path beyond raw SQL. docs/PRD.md §7's Privacy NFR names the requirement. The audit-log piece, who queried which identity/sighting, is done: docs/DECISIONS.md ADR-0010 added an `audit_log` table, written on `identity.get`, `identity.list_sightings`, `identity.merge`, and `identity.split`, riding on the operator identity item 1's auth now puts on every request.
 
-**Why it matters**: Called out in the PRD itself as the one requirement that "must be restricted... not just advisory." For a system that fingerprints people's movements, this is the gap most likely to cause real harm or legal exposure if it ships without it, ahead of most items above on actual risk, even though it's not blocking day-to-day development the way auth is.
+**Why it matters**: Called out in the PRD itself as the one requirement that "must be restricted... not just advisory." For a system that fingerprints people's movements, this is the gap most likely to cause real harm or legal exposure if it ships without it.
 
-**Next step**: An audit log table (who queried which identity/sighting, when) is the smallest piece and layers on top of item 1 (auth) for free once there's a caller identity to log. Consent/enrollment flow and a deletion API are bigger and need their own design pass, likely alongside item 4 (retention).
+**Next step**: Consent/enrollment flow and a deletion API are the remaining, bigger pieces and need their own design pass, likely alongside item 4 (retention). No API endpoint exposes the audit log itself yet either, it's write-only for now.
 
 ## 8. No observability
 
