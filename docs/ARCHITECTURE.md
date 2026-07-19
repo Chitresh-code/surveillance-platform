@@ -21,6 +21,8 @@ flowchart TB
     DET --> DB
     API[REST API] --> DB
     API --> BLOB
+    REID --> FQ
+    FQ --> API
     UI[Map UI] --> API
     INT[External Integrators] --> API
     GC[Retention / GC] --> DB
@@ -29,11 +31,11 @@ flowchart TB
 
 - **Ingestion Service** — connects to each camera's stream, normalizes frame rate/resolution, and pushes frames onto a queue per camera. Owns start/stop lifecycle for a camera's ingestion. A dropped camera connection is retried here and must not affect other cameras.
 - **Detection & Tracking Service** — consumes frames, runs an object detector, and maintains per-camera tracks (associating detections across consecutive frames into a single trajectory). Writes track and detection records, and stores representative frame crops in the object store. Scales horizontally — one or more workers can each own a subset of cameras.
-- **Re-Identification Service** — takes a finished or in-progress track, computes an embedding, and matches it against known identities. Creates a new identity when nothing clears the match threshold, otherwise appends a sighting to an existing identity. This is the component that answers "have we seen this person before, on any camera."
+- **Re-Identification Service** — takes a finished or in-progress track, computes an embedding, and matches it against known identities. Creates a new identity when nothing clears the match threshold, otherwise appends a sighting to an existing identity. This is the component that answers "have we seen this person before, on any camera." Also publishes each new sighting onto the frame queue's pub/sub channel for the API's real-time feed (docs/DECISIONS.md ADR-0012).
 - **Metadata Store** — structured, queryable storage for cameras, tracks, detections, identities, and sightings. This is what the API reads from for anything other than raw media.
 - **Object / Frame Store** — holds raw video segments and frame crops referenced by detections/tracks. Kept separate from the metadata store because it's large, cheap-per-byte, and has different retention rules than structured metadata.
-- **REST API** — the only supported way to read or write platform state from outside. See docs/API_SPEC.md for the contract. Talks to the metadata store and object store; never talks to cameras directly.
-- **Map UI** — a client of the REST API, nothing more. Renders camera locations and recent sightings.
+- **REST API** — the only supported way to read or write platform state from outside. See docs/API_SPEC.md for the contract. Talks to the metadata store and object store; never talks to cameras directly. Also subscribes to the same queue's pub/sub channel to forward newly-created sightings to connected clients in real time (`GET /events/stream`, docs/DECISIONS.md ADR-0012).
+- **Map UI** — a client of the REST API, nothing more. Renders camera locations and recent sightings, plus a management dashboard (cameras, identity review, audit log) and a live sighting feed.
 - **Retention / GC** — a scheduled process that deletes identities/tracks/detections and their frame crops once they're past the retention window (docs/DECISIONS.md ADR-0011). Talks directly to the metadata store and object store, same as the API, since it's the same "who's allowed to touch storage" boundary, not a request-serving one.
 
 ## 2. Data flow — one frame's journey
@@ -124,6 +126,8 @@ flowchart TB
     det --> obj
     det --> reid --> db
     det --> db
+    reid --> mq
+    mq --> api
     api --> db
     api --> obj
     web --> api
@@ -145,6 +149,7 @@ Each box is a container; `detection-worker` is the one expected to scale out as 
 - Video and biometric-like data (embeddings, face/body crops) are sensitive by default. The REST API is the single enforcement point for access control — nothing outside it talks to storage directly.
 - Retention limits (PRD NFR) must be enforced by a scheduled process, not left as a manual cleanup task — implemented as the `retention` service (docs/DECISIONS.md ADR-0011).
 - Logs and metrics should reference record IDs, not embed raw frames or embeddings.
+- The audit log (who did what, to which identity) is queryable via `GET /audit-log`, not just written (docs/GAPS.md item 7); it's the durable record of operator actions, distinct from the best-effort live sighting feed (docs/DECISIONS.md ADR-0012).
 
 ## 7. Stack status
 
