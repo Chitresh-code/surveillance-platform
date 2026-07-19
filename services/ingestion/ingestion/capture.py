@@ -3,7 +3,9 @@
 Reads frames from a camera's stream_url (docs/DECISIONS.md ADR-0003: cv2.VideoCapture)
 and pushes JPEG-encoded frames onto a Redis stream (ADR-0005) for the detection
 service to consume. A dropped connection is retried here so it never takes down
-another camera's ingestion (docs/ARCHITECTURE.md §1).
+another camera's ingestion (docs/ARCHITECTURE.md §1). Frames carry no track_id:
+associating them into per-person tracks happens in the detection service, which
+is where the tracker runs (ADR-0007).
 """
 
 import logging
@@ -25,12 +27,11 @@ def frame_stream_key(camera_id: str) -> str:
     return f"frames:{camera_id}"
 
 
-def build_frame_fields(frame, track_id: str) -> dict[str, bytes | str]:
+def build_frame_fields(frame) -> dict[str, bytes | str]:
     ok, buf = cv2.imencode(".jpg", frame)
     if not ok:
         raise ValueError("failed to JPEG-encode frame")
     return {
-        "track_id": track_id,
         "captured_at": datetime.now(timezone.utc).isoformat(),
         "jpeg": buf.tobytes(),
     }
@@ -40,7 +41,6 @@ def build_frame_fields(frame, track_id: str) -> dict[str, bytes | str]:
 class CameraWorker:
     camera_id: str
     stream_url: str
-    track_id: str
     redis_client: redis.Redis
     target_fps: float = 5.0
 
@@ -75,10 +75,10 @@ class CameraWorker:
                     logger.warning("camera_id=%s dropped stream, reconnecting", self.camera_id)
                     break
                 try:
-                    fields = build_frame_fields(frame, self.track_id)
+                    fields = build_frame_fields(frame)
                     self.redis_client.xadd(frame_stream_key(self.camera_id), fields, maxlen=1000, approximate=True)
                 except Exception:
-                    logger.exception("camera_id=%s track_id=%s failed to publish frame", self.camera_id, self.track_id)
+                    logger.exception("camera_id=%s failed to publish frame", self.camera_id)
                 elapsed = time.monotonic() - loop_start
                 self._stop_event.wait(max(0.0, min_frame_interval - elapsed))
 
