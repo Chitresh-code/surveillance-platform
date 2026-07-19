@@ -4,7 +4,7 @@ A multi-camera video surveillance platform. It ingests video from several camera
 
 ## Status
 
-Phase 1 (single camera: ingestion, detection, storage, minimal API), Phase 2 (multiple cameras, tracking within each), Phase 3 (cross-camera re-identification), and Phase 4 (map UI, full API surface, Postman collection, Docker deployment polish) are implemented. See the roadmap in [docs/PRD.md](docs/PRD.md) for what's planned and in what order, and [docs/DECISIONS.md](docs/DECISIONS.md) for why each piece of the stack was chosen.
+Phase 1 (single camera: ingestion, detection, storage, minimal API), Phase 2 (multiple cameras, tracking within each), Phase 3 (cross-camera re-identification), and Phase 4 (map UI, full API surface, Postman collection, Docker deployment polish) are implemented. See the roadmap in [docs/PRD.md](docs/PRD.md) for what's planned and in what order, [docs/DECISIONS.md](docs/DECISIONS.md) for why each piece of the stack was chosen, and [docs/GAPS.md](docs/GAPS.md) for what's known to still be missing before this is production-ready (auth, a management dashboard, retention, and more).
 
 ## Services
 
@@ -27,6 +27,7 @@ Phase 1 (single camera: ingestion, detection, storage, minimal API), Phase 2 (mu
 | [docs/CODING_STANDARDS.md](docs/CODING_STANDARDS.md) | Repo layout, commit/PR conventions |
 | [docs/DECISIONS.md](docs/DECISIONS.md) | Architecture decision log |
 | [docs/TESTING.md](docs/TESTING.md) | Test strategy by layer |
+| [docs/GAPS.md](docs/GAPS.md) | Known gaps between this and a production-ready system |
 
 ## Getting started
 
@@ -79,6 +80,47 @@ npm run dev
 ### API collection
 
 [`postman/surveillance-platform.postman_collection.json`](postman/surveillance-platform.postman_collection.json) mirrors [docs/API_SPEC.md](docs/API_SPEC.md); import it into Postman and set the `base_url` collection variable if not running on the default port.
+
+### Testing with your own camera
+
+`ingestion` reads whatever `stream_url` a camera is registered with via plain `cv2.VideoCapture` (docs/DECISIONS.md ADR-0003), so you don't need a real RTSP camera to try this out.
+
+**Phone.** Install an IP-camera app that exposes a pull-style network stream (not a push/broadcast app like a streaming app aimed at a platform):
+
+- **Android**: search the Play Store for "IP Webcam" (by Pavel Khlebovich), free, exposes an MJPEG stream at `http://<phone-ip>:8080/video` and an RTSP option too. This is the standard choice for this exact use case.
+- **iOS**: search the App Store for "IP Camera Lite" or similar. Look for one that advertises a raw RTSP/HTTP stream URL you can open in VLC, not a proprietary app-to-app pairing (those won't work with `cv2.VideoCapture`). Availability on iOS shifts more often than Android, so verify it still gives you a plain stream URL before relying on it.
+
+Put your phone on the same LAN as wherever `ingestion` runs, start the app, and register the URL it gives you:
+
+```sh
+curl -X POST http://localhost:8000/api/v1/cameras \
+  -H "Content-Type: application/json" \
+  -d '{"name": "My Phone", "lat": 12.9716, "lon": 77.5946, "stream_url": "http://<phone-ip>:8080/video"}'
+
+curl -X POST http://localhost:8000/api/v1/cameras/{camera_id}/stream/start
+```
+
+No code changes needed, this works today.
+
+**Laptop webcam.** `cv2.VideoCapture` needs an *integer* device index (`0` for the built-in camera) to open a local webcam, not a URL. `resolve_capture_source` in `services/ingestion/ingestion/capture.py` handles this: register the camera with `stream_url` set to `"0"` (a plain digit string) and it's treated as a device index instead of a filename.
+
+Docker Desktop can't pass a host webcam into a container, so `ingestion` has to run on the host for this, against the rest of the stack in Docker:
+
+```sh
+docker compose up --build metadata-db frame-queue migrate api detection reid frontend   # skip `ingestion`
+
+curl -X POST http://localhost:8000/api/v1/cameras \
+  -H "Content-Type: application/json" \
+  -d '{"name": "Laptop Webcam", "lat": 12.9716, "lon": 77.5946, "stream_url": "0"}'
+curl -X POST http://localhost:8000/api/v1/cameras/{camera_id}/stream/start
+
+cd services/ingestion
+DATABASE_URL=postgresql+psycopg://surveillance:surveillance@localhost:5432/surveillance \
+REDIS_URL=redis://localhost:6379/0 \
+uv run python -m ingestion.main
+```
+
+A one-command setup script for this (bring up the stack minus `ingestion`, run it on the host) is a natural follow-on once it's needed more than occasionally; not built yet.
 
 ### Running tests locally
 
