@@ -1,0 +1,82 @@
+services:
+  metadata-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-surveillance}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-surveillance}
+      POSTGRES_DB: ${POSTGRES_DB:-surveillance}
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-surveillance}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    ports:
+      - "5432:5432"
+
+  frame-queue:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  migrate:
+    build:
+      context: .
+      dockerfile: services/api/Dockerfile
+    command: sh -c "cd /app/services/common && uv run --project /app/services/api alembic upgrade head"
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-surveillance}:${POSTGRES_PASSWORD:-surveillance}@metadata-db:5432/${POSTGRES_DB:-surveillance}
+    depends_on:
+      metadata-db:
+        condition: service_healthy
+
+  api:
+    build:
+      context: .
+      dockerfile: services/api/Dockerfile
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-surveillance}:${POSTGRES_PASSWORD:-surveillance}@metadata-db:5432/${POSTGRES_DB:-surveillance}
+    ports:
+      - "8000:8000"
+    depends_on:
+      metadata-db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+  ingestion:
+    build:
+      context: .
+      dockerfile: services/ingestion/Dockerfile
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-surveillance}:${POSTGRES_PASSWORD:-surveillance}@metadata-db:5432/${POSTGRES_DB:-surveillance}
+      REDIS_URL: redis://frame-queue:6379/0
+    depends_on:
+      frame-queue:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+  detection:
+    build:
+      context: .
+      dockerfile: services/detection/Dockerfile
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-surveillance}:${POSTGRES_PASSWORD:-surveillance}@metadata-db:5432/${POSTGRES_DB:-surveillance}
+      REDIS_URL: redis://frame-queue:6379/0
+      FRAME_STORE_DIR: /data/frames
+    volumes:
+      - frame-store:/data/frames
+    depends_on:
+      frame-queue:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+volumes:
+  pg-data:
+  frame-store:

@@ -6,3 +6,5 @@ node_modules/
 .venv/
 dist/
 build/
+.pytest_cache/
+*.egg-info/

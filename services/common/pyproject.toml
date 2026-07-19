@@ -1,0 +1,22 @@
+[project]
+name = "surveillance-common"
+version = "0.1.0"
+description = "Shared DB models and helpers used by more than one surveillance-platform service."
+requires-python = ">=3.12"
+dependencies = [
+    "alembic>=1.18.5",
+    "psycopg[binary]>=3.3.4",
+    "sqlalchemy>=2.0.51",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["common*"]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+]
