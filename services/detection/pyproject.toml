@@ -1,0 +1,25 @@
+[project]
+name = "surveillance-detection"
+version = "0.1.0"
+description = "Runs person detection on queued frames and writes detections to the metadata store (docs/ARCHITECTURE.md)."
+requires-python = ">=3.12"
+dependencies = [
+    "redis>=8.0.1",
+    "surveillance-common>=0.1.0",
+    "ultralytics>=8.4.101",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["detection*"]
+
+[tool.uv.sources]
+surveillance-common = { path = "../common", editable = true }
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+]
