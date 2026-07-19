@@ -1,0 +1,166 @@
+{
+  "info": {
+    "name": "Surveillance Platform API",
+    "description": "Mirrors docs/API_SPEC.md. If the two drift, the doc wins and this collection gets fixed.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "base_url", "value": "http://localhost:8000/api/v1" },
+    { "key": "camera_id", "value": "" },
+    { "key": "track_id", "value": "" },
+    { "key": "identity_id", "value": "" },
+    { "key": "merge_identity_id", "value": "" },
+    { "key": "event_id", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Cameras",
+      "item": [
+        {
+          "name": "Register a camera",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "  pm.collectionVariables.set('camera_id', pm.response.json().id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{base_url}}/cameras",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Lobby North\",\n  \"lat\": 12.9716,\n  \"lon\": 77.5946,\n  \"stream_url\": \"rtsp://camera-host/lobby-north\"\n}"
+            }
+          }
+        },
+        {
+          "name": "List cameras",
+          "request": { "method": "GET", "url": "{{base_url}}/cameras?limit=50" }
+        },
+        {
+          "name": "Get a camera",
+          "request": { "method": "GET", "url": "{{base_url}}/cameras/{{camera_id}}" }
+        },
+        {
+          "name": "Update a camera",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{base_url}}/cameras/{{camera_id}}",
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Lobby North (renamed)\"\n}" }
+          }
+        },
+        {
+          "name": "Start streaming",
+          "request": { "method": "POST", "url": "{{base_url}}/cameras/{{camera_id}}/stream/start" }
+        },
+        {
+          "name": "Stop streaming",
+          "request": { "method": "POST", "url": "{{base_url}}/cameras/{{camera_id}}/stream/stop" }
+        },
+        {
+          "name": "List tracks for a camera",
+          "request": { "method": "GET", "url": "{{base_url}}/cameras/{{camera_id}}/tracks?limit=50" }
+        },
+        {
+          "name": "Delete a camera",
+          "request": { "method": "DELETE", "url": "{{base_url}}/cameras/{{camera_id}}" }
+        }
+      ]
+    },
+    {
+      "name": "Tracks & detections",
+      "item": [
+        {
+          "name": "Get a track",
+          "request": { "method": "GET", "url": "{{base_url}}/tracks/{{track_id}}" }
+        },
+        {
+          "name": "List detections for a track",
+          "request": { "method": "GET", "url": "{{base_url}}/tracks/{{track_id}}/detections?limit=50" }
+        }
+      ]
+    },
+    {
+      "name": "Identities",
+      "item": [
+        {
+          "name": "List identities",
+          "request": { "method": "GET", "url": "{{base_url}}/identities?limit=50" }
+        },
+        {
+          "name": "Get an identity",
+          "request": { "method": "GET", "url": "{{base_url}}/identities/{{identity_id}}" }
+        },
+        {
+          "name": "List sightings for an identity",
+          "request": { "method": "GET", "url": "{{base_url}}/identities/{{identity_id}}/sightings?limit=50" }
+        },
+        {
+          "name": "Merge identities",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{base_url}}/identities/{{identity_id}}/merge",
+            "body": { "mode": "raw", "raw": "{\n  \"merge_identity_id\": \"{{merge_identity_id}}\"\n}" }
+          }
+        },
+        {
+          "name": "Split a track into a new identity",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{base_url}}/identities/{{identity_id}}/split",
+            "body": { "mode": "raw", "raw": "{\n  \"track_id\": \"{{track_id}}\"\n}" }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Events",
+      "item": [
+        {
+          "name": "List events",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/events?camera_id={{camera_id}}&identity_id={{identity_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["events"],
+              "query": [
+                { "key": "camera_id", "value": "{{camera_id}}" },
+                { "key": "identity_id", "value": "{{identity_id}}" },
+                { "key": "from", "value": "", "disabled": true },
+                { "key": "to", "value": "", "disabled": true }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get an event",
+          "request": { "method": "GET", "url": "{{base_url}}/events/{{event_id}}" }
+        }
+      ]
+    },
+    {
+      "name": "Map",
+      "item": [
+        {
+          "name": "List map cameras",
+          "request": { "method": "GET", "url": "{{base_url}}/map/cameras?limit=50" }
+        },
+        {
+          "name": "List map activity",
+          "request": { "method": "GET", "url": "{{base_url}}/map/activity?limit=100" }
+        }
+      ]
+    }
+  ]
+}
