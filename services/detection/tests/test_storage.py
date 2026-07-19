@@ -12,7 +12,7 @@ def test_crop_path_uses_detection_id():
 
 def test_save_crop_writes_a_file_sized_to_the_box(tmp_path):
     frame = np.zeros((100, 100, 3), dtype=np.uint8)
-    box = DetectedBox(x=10, y=10, w=20, h=30, confidence=0.9)
+    box = DetectedBox(x=10, y=10, w=20, h=30, confidence=0.9, track_id=1)
     path = str(tmp_path / "det_abc.jpg")
 
     save_crop(frame, box, path)

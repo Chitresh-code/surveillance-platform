@@ -1,7 +1,12 @@
-"""Shared by ingestion and detection: which per-camera workers to start/stop this poll cycle."""
+"""Generic id-set diffing: what to start/open vs. stop/close this cycle.
+
+Used by ingestion and detection to reconcile per-camera worker pools against
+the streaming camera list, and by the detection worker to reconcile per-camera
+tracker output against currently open tracks.
+"""
 
 
-def diff_camera_sets(streaming_ids: set[str], active_ids: set[str]) -> tuple[set[str], set[str]]:
-    to_start = streaming_ids - active_ids
-    to_stop = active_ids - streaming_ids
-    return to_start, to_stop
+def diff_ids(target_ids: set[str], current_ids: set[str]) -> tuple[set[str], set[str]]:
+    to_add = target_ids - current_ids
+    to_remove = current_ids - target_ids
+    return to_add, to_remove

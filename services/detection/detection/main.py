@@ -13,7 +13,7 @@ import time
 import redis
 from common.db import session_scope
 from common.models import Camera
-from common.worker_pool import diff_camera_sets
+from common.worker_pool import diff_ids
 from sqlalchemy import select
 from ultralytics import YOLO
 
@@ -42,7 +42,7 @@ def run(poll_interval: float = POLL_INTERVAL_SECONDS) -> None:
     logger.info("detection service starting, worker_id=%s", WORKER_ID)
     while True:
         streaming_ids = get_streaming_camera_ids()
-        to_start, to_stop = diff_camera_sets(streaming_ids, set(workers))
+        to_start, to_stop = diff_ids(streaming_ids, set(workers))
 
         for camera_id in to_stop:
             workers.pop(camera_id).stop()
