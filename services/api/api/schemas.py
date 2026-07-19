@@ -102,6 +102,16 @@ class SplitRequest(BaseModel):
     track_id: str
 
 
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+
+class TokenOut(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+
+
 # Event is a denormalized read view over Sighting (docs/API_SPEC.md §2, §7), not a
 # separate stored resource, so its shape is Sighting's shape.
 EventOut = SightingOut

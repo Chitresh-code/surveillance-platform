@@ -5,7 +5,9 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from api.deps import get_db
+from api.audit import log_audit
+from api.auth import AuthenticatedOperator
+from api.deps import current_operator, get_db
 from api.errors import APIError
 from api.pagination import paginate
 from api.schemas import IdentityListOut, IdentityOut, MergeRequest, SightingListOut, SplitRequest
@@ -27,22 +29,36 @@ def list_identities(limit: int = DEFAULT_LIMIT, cursor: str | None = None, sessi
 
 
 @router.get("/{identity_id}", response_model=IdentityOut)
-def get_identity(identity_id: str, session: Session = Depends(get_db)) -> Identity:
-    return _get_identity_or_404(session, identity_id)
+def get_identity(
+    identity_id: str, session: Session = Depends(get_db), operator: AuthenticatedOperator = Depends(current_operator)
+) -> Identity:
+    identity = _get_identity_or_404(session, identity_id)
+    log_audit(session, operator, "identity.get", "identity", identity_id)
+    return identity
 
 
 @router.get("/{identity_id}/sightings", response_model=SightingListOut)
 def list_identity_sightings(
-    identity_id: str, limit: int = DEFAULT_LIMIT, cursor: str | None = None, session: Session = Depends(get_db)
+    identity_id: str,
+    limit: int = DEFAULT_LIMIT,
+    cursor: str | None = None,
+    session: Session = Depends(get_db),
+    operator: AuthenticatedOperator = Depends(current_operator),
 ) -> dict:
     _get_identity_or_404(session, identity_id)
+    log_audit(session, operator, "identity.list_sightings", "identity", identity_id)
     stmt = select(Sighting).where(Sighting.identity_id == identity_id)
     rows, next_cursor = paginate(session, stmt, Sighting, Sighting.seen_at, limit, cursor)
     return {"data": rows, "next_cursor": next_cursor}
 
 
 @router.post("/{identity_id}/merge", response_model=IdentityOut)
-def merge_identity(identity_id: str, body: MergeRequest, session: Session = Depends(get_db)) -> Identity:
+def merge_identity(
+    identity_id: str,
+    body: MergeRequest,
+    session: Session = Depends(get_db),
+    operator: AuthenticatedOperator = Depends(current_operator),
+) -> Identity:
     if body.merge_identity_id == identity_id:
         raise APIError(400, "invalid_merge", "Cannot merge an identity into itself.")
     identity = _get_identity_or_404(session, identity_id)
@@ -53,12 +69,18 @@ def merge_identity(identity_id: str, body: MergeRequest, session: Session = Depe
     identity.first_seen = min(identity.first_seen, other.first_seen)
     identity.last_seen = max(identity.last_seen, other.last_seen)
     session.delete(other)
+    log_audit(session, operator, "identity.merge", "identity", identity_id)
     session.flush()
     return identity
 
 
 @router.post("/{identity_id}/split", response_model=IdentityOut)
-def split_identity(identity_id: str, body: SplitRequest, session: Session = Depends(get_db)) -> Identity:
+def split_identity(
+    identity_id: str,
+    body: SplitRequest,
+    session: Session = Depends(get_db),
+    operator: AuthenticatedOperator = Depends(current_operator),
+) -> Identity:
     identity = _get_identity_or_404(session, identity_id)
     sighting = session.execute(
         select(Sighting).where(Sighting.track_id == body.track_id, Sighting.identity_id == identity_id)
@@ -75,6 +97,7 @@ def split_identity(identity_id: str, body: SplitRequest, session: Session = Depe
         id=new_id("idn"), first_seen=sighting.seen_at, last_seen=sighting.seen_at, embedding=identity.embedding
     )
     session.add(new_identity)
-    session.flush()
     sighting.identity_id = new_identity.id
+    log_audit(session, operator, "identity.split", "identity", identity_id)
+    session.flush()
     return new_identity
