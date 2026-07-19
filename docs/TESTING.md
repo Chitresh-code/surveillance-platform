@@ -32,7 +32,7 @@ flowchart TB
 - Pipeline/replay and contract tests: run on merges to the main branch at minimum; can run per-PR once they're fast enough not to slow the loop down.
 - Load tests: manual or nightly, not part of the PR gate.
 
-No CI workflow implements this yet, tests are run by hand today; tracked in docs/GAPS.md.
+`.github/workflows/test.yml` runs unit + integration tests (matrix over `services/*`) on every PR and on push to `main`. Pipeline/replay and contract tests aren't wired into CI yet since neither exists in the repo yet; add them to the workflow once they do (see docs/GAPS.md).
 
 ## 5. What this suite doesn't cover
 
