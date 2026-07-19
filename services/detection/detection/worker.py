@@ -5,6 +5,10 @@ Each worker owns one BYTETracker instance for its camera, so tracker-local
 integer track ids only need to be mapped to persistent Track rows within this
 worker's lifetime. A bad frame must not take down the worker (docs/CODING_STANDARDS.md
 §5) since one malformed frame is not a reason to drop a camera's whole session.
+
+When a track closes, its id is published on the `tracks:ready` Redis stream so the
+reid service can pick it up (docs/ARCHITECTURE.md: re-identification triggers when a
+track closes, docs/DECISIONS.md ADR-0008).
 """
 
 import logging
@@ -26,6 +30,7 @@ logger = logging.getLogger(__name__)
 
 CONSUMER_GROUP = "detection-workers"
 BLOCK_MS = 2000
+TRACKS_READY_STREAM = "tracks:ready"
 
 
 def decode_jpeg(jpeg_bytes: bytes) -> np.ndarray:
@@ -66,7 +71,8 @@ class DetectionWorker:
     def stop(self) -> None:
         self._stop_event.set()
         self._thread.join(timeout=10)
-        self._close_tracks(self._local_to_db_track.keys(), datetime.now(timezone.utc))
+        closed_track_ids = self._close_tracks(self._local_to_db_track.keys(), datetime.now(timezone.utc))
+        self._publish_ready(closed_track_ids)
 
     def _run(self) -> None:
         while not self._stop_event.is_set():
@@ -108,19 +114,23 @@ class DetectionWorker:
                         )
                     )
 
-                self._close_tracks(to_close, captured_at, session=session)
+                closed_track_ids = self._close_tracks(to_close, captured_at, session=session)
+
+            self._publish_ready(closed_track_ids)
         except Exception:
             logger.exception("camera_id=%s failed to process frame", self.camera_id)
         finally:
             self.redis_client.xack(self.stream_key, CONSUMER_GROUP, message_id)
 
-    def _close_tracks(self, local_ids, ended_at: datetime, session=None) -> None:
+    def _close_tracks(self, local_ids, ended_at: datetime, session=None) -> list[str]:
         # ponytail: closes a track the instant a frame's tracked output drops it, so a
         # briefly-occluded person becomes two Track rows instead of one. Tighten by
         # diffing against tracker.lost_stracks if that skew matters later.
         local_ids = list(local_ids)
         if not local_ids:
-            return
+            return []
+
+        closed_track_ids: list[str] = []
 
         def _close(session) -> None:
             for local_id in local_ids:
@@ -130,9 +140,15 @@ class DetectionWorker:
                 track = session.get(Track, track_id)
                 if track is not None:
                     track.ended_at = ended_at
+                    closed_track_ids.append(track_id)
 
         if session is not None:
             _close(session)
         else:
             with session_scope() as session:
                 _close(session)
+        return closed_track_ids
+
+    def _publish_ready(self, track_ids: list[str]) -> None:
+        for track_id in track_ids:
+            self.redis_client.xadd(TRACKS_READY_STREAM, {"track_id": track_id})
