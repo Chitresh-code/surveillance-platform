@@ -11,7 +11,7 @@ This is the contract for the REST API described in docs/ARCHITECTURE.md. It's wr
 - List endpoints are paginated with `limit` (default 50, max 200) and `cursor` query params; responses include a `next_cursor` (`null` when there's no more data).
 - Filtering on list endpoints uses query params named after the field (`camera_id`, `identity_id`, `from`, `to`).
 - Errors use a consistent envelope (see §5) and standard HTTP status codes.
-- Every endpoint except `POST /auth/login` and `GET /health` requires `Authorization: Bearer <token>` (docs/DECISIONS.md ADR-0010). A missing or invalid token gets a 401 with `error.code` of `unauthorized`. `GET /health` also sits outside the `/api/v1` base path (it isn't a versioned resource) — it's just `GET /health`.
+- Every endpoint except `POST /auth/login`, `GET /health`, and `GET /events/stream` requires `Authorization: Bearer <token>` (docs/DECISIONS.md ADR-0010). A missing or invalid token gets a 401 with `error.code` of `unauthorized`. `GET /health` also sits outside the `/api/v1` base path (it isn't a versioned resource) — it's just `GET /health`. `GET /events/stream` still requires a valid token, but as a `token` query param instead of a header (docs/DECISIONS.md ADR-0012).
 
 ## 2. Resources
 
@@ -23,6 +23,7 @@ This is the contract for the REST API described in docs/ARCHITECTURE.md. It's wr
 | `Identity` | A cross-camera cluster of tracks believed to be the same subject. |
 | `Sighting` | A link between a track and an identity, with a match confidence. |
 | `Event` | A queryable, denormalized view over sightings for the API's read side. |
+| `AuditLog` | A record of an operator action against an identity (docs/GAPS.md item 7). |
 
 ## 3. Endpoints
 
@@ -82,6 +83,18 @@ This is the contract for the REST API described in docs/ARCHITECTURE.md. It's wr
 | Method | Path | Purpose |
 |---|---|---|
 | GET | `/health` | Liveness/readiness check: a DB round-trip. Unauthenticated, outside `/api/v1`. |
+
+### Audit log
+
+| Method | Path | Purpose |
+|---|---|---|
+| GET | `/audit-log` | List operator actions, filterable by `operator_id`, `resource_type`, `resource_id` (docs/GAPS.md item 7). |
+
+### Real-time feed
+
+| Method | Path | Purpose |
+|---|---|---|
+| GET | `/events/stream` | Server-Sent Events stream of newly-created sightings, one JSON object per `data:` line (docs/DECISIONS.md ADR-0012). Auth is a `token` query param, not the `Authorization` header, since `EventSource` can't set custom headers. Best-effort: a client that isn't connected when a sighting happens simply misses it, this isn't a durable/replayable feed — use `GET /events` for the queryable record. |
 
 ## 4. Example payloads
 
@@ -161,5 +174,4 @@ Breaking changes get a new base path (`/api/v2`); additive changes (new optional
 
 - Whether `Event` is a real stored table or a view computed from `Sighting` — implementation detail, doesn't change this contract either way.
 - Rate limiting on `/auth/login` and on API usage generally — not built yet (docs/DECISIONS.md ADR-0010's consequences).
-- Operator account management (create/list/deactivate operators via the API instead of the `create_operator` CLI script) — docs/GAPS.md item 2.
-- No API endpoint exposes the audit log itself yet (docs/GAPS.md item 7) — it's write-only from the API's perspective.
+- Operator account management (create/list/deactivate operators via the API instead of the `create_operator` CLI script) — docs/GAPS.md item 2's remaining piece; no dashboard screen for it either.

@@ -11,3 +11,14 @@ export function setToken(token: string): void {
 export function clearToken(): void {
   localStorage.removeItem(TOKEN_STORAGE_KEY)
 }
+
+export function getUsername(): string | null {
+  const token = getToken()
+  if (!token) return null
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1]))
+    return typeof payload.username === 'string' ? payload.username : null
+  } catch {
+    return null
+  }
+}

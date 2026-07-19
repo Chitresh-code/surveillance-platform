@@ -1,0 +1,17 @@
+meta {
+  name: List audit log
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{base_url}}/audit-log?resource_type={{resource_type}}&resource_id={{identity_id}}
+  body: none
+  auth: inherit
+}
+
+params:query {
+  ~operator_id:
+  resource_type: {{resource_type}}
+  resource_id: {{identity_id}}
+}

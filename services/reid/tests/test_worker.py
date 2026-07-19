@@ -1,8 +1,10 @@
+import json
 from datetime import datetime, timezone
 
 import cv2
 import numpy as np
 from common.db import session_scope
+from common.events import SIGHTINGS_CHANNEL
 from common.ids import new_id
 from common.models import Camera, Detection, Identity, Sighting, Track
 from sqlalchemy import select
@@ -19,8 +21,14 @@ class _FakeEncoder:
 
 
 class _FakeRedis:
+    def __init__(self):
+        self.published = []
+
     def xack(self, *args, **kwargs) -> None:
         pass
+
+    def publish(self, channel, message) -> None:
+        self.published.append((channel, message))
 
 
 def _make_track_with_detection(tmp_path, confidence: float = 0.9) -> str:
@@ -53,7 +61,8 @@ def _sighting_for(track_id: str) -> Sighting:
 
 
 def test_worker_creates_a_new_identity_when_nothing_matches(tmp_path):
-    worker = ReidWorker(encoder=_FakeEncoder(), redis_client=_FakeRedis(), consumer_name="test", match_threshold=0.6)
+    redis_client = _FakeRedis()
+    worker = ReidWorker(encoder=_FakeEncoder(), redis_client=redis_client, consumer_name="test", match_threshold=0.6)
     track_id = _make_track_with_detection(tmp_path)
 
     worker._process_message(b"1-1", {b"track_id": track_id.encode()})
@@ -62,6 +71,26 @@ def test_worker_creates_a_new_identity_when_nothing_matches(tmp_path):
     assert sighting.match_confidence == 1.0
     with session_scope() as session:
         assert session.get(Identity, sighting.identity_id) is not None
+
+    assert len(redis_client.published) == 1
+    channel, message = redis_client.published[0]
+    assert channel == SIGHTINGS_CHANNEL
+    assert json.loads(message)["identity_id"] == sighting.identity_id
+
+
+def test_worker_does_not_publish_when_track_has_no_crops(tmp_path):
+    redis_client = _FakeRedis()
+    worker = ReidWorker(encoder=_FakeEncoder(), redis_client=redis_client, consumer_name="test", match_threshold=0.6)
+    camera_id = new_id("cam")
+    track_id = new_id("trk")
+    now = datetime.now(timezone.utc)
+    with session_scope() as session:
+        session.add(Camera(id=camera_id, name="Test Cam", lat=0.0, lon=0.0, stream_url="rtsp://x", status="idle"))
+        session.add(Track(id=track_id, camera_id=camera_id, started_at=now, ended_at=now))
+
+    worker._process_message(b"1-1", {b"track_id": track_id.encode()})
+
+    assert redis_client.published == []
 
 
 def test_worker_matches_an_existing_identity_when_embedding_is_close(tmp_path):

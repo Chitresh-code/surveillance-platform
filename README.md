@@ -1,6 +1,6 @@
 # Surveillance Platform
 
-A multi-camera video surveillance platform. It ingests video from several cameras, detects and tracks people within each camera's view, and re-identifies the same person as they move between cameras. Detections, tracks, and identity matches land in a metadata store, queryable through a REST API, with a map view showing where activity is happening.
+A multi-camera video surveillance platform. It ingests video from several cameras, detects and tracks people within each camera's view, and re-identifies the same person as they move between cameras. Detections, tracks, and identity matches land in a metadata store, queryable through a REST API, with an operator dashboard (map, camera management, identity review, audit log, live sighting feed) showing where activity is happening.
 
 ## Status
 
@@ -38,7 +38,7 @@ Requires Docker and Docker Compose. `.env.example` documents the Postgres creden
 docker compose up --build
 ```
 
-This brings up `metadata-db` (Postgres), `frame-queue` (Redis), a one-off `migrate` job that applies Alembic migrations, then `api`, `ingestion`, `detection`, `reid`, `retention`, and `frontend`. The API is at `http://localhost:8000/api/v1`, the map UI at `http://localhost:5173`. `retention` runs in the background, deleting identities/tracks/detections (and their frame crops) older than `RETENTION_DAYS` (default 90) every `RETENTION_GC_INTERVAL_SECONDS` (default 24h) — see docs/DECISIONS.md ADR-0011. `GET /health` (no token needed) is a DB connectivity check, used as the `api` container's own healthcheck.
+This brings up `metadata-db` (Postgres), `frame-queue` (Redis), a one-off `migrate` job that applies Alembic migrations, then `api`, `ingestion`, `detection`, `reid`, `retention`, and `frontend`. The API is at `http://localhost:8000/api/v1`, the dashboard at `http://localhost:5173`. `retention` runs in the background, deleting identities/tracks/detections (and their frame crops) older than `RETENTION_DAYS` (default 90) every `RETENTION_GC_INTERVAL_SECONDS` (default 24h) — see docs/DECISIONS.md ADR-0011. `GET /health` (no token needed) is a DB connectivity check, used as the `api` container's own healthcheck. `reid` also publishes each new sighting to Redis, which `GET /events/stream` (SSE) forwards to the dashboard's live feed panel in real time (docs/DECISIONS.md ADR-0012).
 
 Every endpoint except `POST /auth/login` requires a bearer token (docs/DECISIONS.md ADR-0010). Create an operator and log in:
 
@@ -73,6 +73,12 @@ Operators can correct a matching mistake with `POST /api/v1/identities/{identity
 curl -X DELETE http://localhost:8000/api/v1/identities/{identity_id} -H "Authorization: Bearer $TOKEN"
 ```
 
+Every operator action against an identity (`get`, `list_sightings`, `merge`, `split`, `delete`) is recorded and queryable, not just written:
+
+```sh
+curl "http://localhost:8000/api/v1/audit-log?resource_id={identity_id}" -H "Authorization: Bearer $TOKEN"
+```
+
 Full contract in [docs/API_SPEC.md](docs/API_SPEC.md).
 
 `GET /api/v1/events` gives the same sightings as a filterable, cross-camera feed (`camera_id`, `identity_id`, `from`, `to` query params); `GET /api/v1/map/cameras` and `GET /api/v1/map/activity` are what the map UI polls for markers and the recent-activity overlay:
@@ -83,9 +89,9 @@ curl http://localhost:8000/api/v1/map/cameras -H "Authorization: Bearer $TOKEN"
 curl http://localhost:8000/api/v1/map/activity -H "Authorization: Bearer $TOKEN"
 ```
 
-### Map UI
+### Dashboard
 
-`docker compose up --build` builds and serves `frontend/` at `http://localhost:5173` (nginx serving the Vite production build, API base URL baked in at build time via the `VITE_API_BASE_URL` build arg). It opens on a login screen, use an operator created with `api.create_operator` (see above); there's no self-service signup yet. For local dev with hot reload instead:
+`docker compose up --build` builds and serves `frontend/` at `http://localhost:5173` (nginx serving the Vite production build, API base URL baked in at build time via the `VITE_API_BASE_URL` build arg). It opens on a login screen, use an operator created with `api.create_operator` (see above); there's no self-service signup yet. Once logged in, the sidebar (`frontend/src/Shell.tsx`) switches between the map, a camera register/edit/delete/stream-toggle screen, an identity review screen (sightings, merge, split, delete), and the audit log, with a live feed of new sightings always visible underneath the nav. Styled as a terminal/hacker-movie console (`frontend/src/index.css`) purely for house style — it has no bearing on the underlying auth or data. For local dev with hot reload instead:
 
 ```sh
 cd frontend

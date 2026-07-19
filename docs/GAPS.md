@@ -12,21 +12,21 @@ This is a backlog, not a committed roadmap like docs/PRD.md §10. Pulling an ite
 
 **Next step**: No self-service signup or operator management exists yet, operators are created with `uv run python -m api.create_operator <username> <password>` (see item 2). No rate limiting on `/auth/login`, no refresh token (a session hard-expires at 12h).
 
-## 2. No management dashboard
+## 2. No management dashboard — mostly fixed
 
-**Gap**: Camera registration, stream start/stop, and identity merge/split only exist as raw API calls (curl/Bruno). `POST /identities/{id}/merge` and `/split` are explicitly "operator correction" endpoints per docs/API_SPEC.md §3, they exist *for* a human, but there's no screen for that human. Operator account creation is in the same boat: a CLI script (`api.create_operator`), not a screen.
+**Gap**: Camera registration, stream start/stop, and identity merge/split only existed as raw API calls (curl/Bruno). `POST /identities/{id}/merge` and `/split` are explicitly "operator correction" endpoints per docs/API_SPEC.md §3, they exist *for* a human, and now have one: `frontend/src/CamerasPage.tsx` (register/edit/delete, stream start/stop) and `frontend/src/IdentitiesPage.tsx` (sightings review, merge/split/delete) are real screens, plus `frontend/src/AuditLogPage.tsx` for the read side of item 7. Operator account creation is still a CLI script (`api.create_operator`), not a screen — the API has no operator CRUD endpoints to build one against.
 
-**Why it matters**: Nobody can actually operate this system without reading the API spec and writing curl commands. The whole point of FR-6 (operator corrections) is a human catching a bad match, which requires a UI to review sightings in the first place.
+**Why it matters**: Nobody could actually operate this system without reading the API spec and writing curl commands. The whole point of FR-6 (operator corrections) is a human catching a bad match, which requires a UI to review sightings in the first place.
 
-**Next step**: Camera CRUD screen, stream start/stop controls, an identity review screen (sightings list + merge/split actions), and operator management, in `frontend/`. Its two former blockers, auth and routing, are both in place now (item 1, item 3), so this is unblocked, just not built.
+**Next step**: Operator account management is the one piece left: no `POST/GET/DELETE /operators` endpoints exist, so there's nothing for a screen to call yet (docs/API_SPEC.md §7). Not built now since it wasn't part of this batch and needs its own endpoint design first.
 
-## 3. UI is map-only, no landing page or navigation — partially fixed
+## 3. UI is map-only, no landing page or navigation — fixed
 
-**Gap**: ADR-0009 deliberately scoped the frontend to a single map view with no router: "if the UI grows beyond a map and a couple of list views... this ADR gets revisited with a router." ADR-0010 did exactly that, for auth: `react-router-dom` now routes between `/login` and `/` (the map). There's still only one real screen behind the login, item 2's camera/identity/operator screens don't exist yet.
+**Gap**: ADR-0009 deliberately scoped the frontend to a single map view with no router: "if the UI grows beyond a map and a couple of list views... this ADR gets revisited with a router." ADR-0010 did exactly that, for auth: `react-router-dom` routes between `/login` and the authenticated screens. `frontend/src/Shell.tsx` is now the shared nav/shell item 2's screens needed: a sidebar with Map/Cameras/Identities/Audit log links, the operator's username, a logout button, and a persistent live-feed panel (item 5), wrapping every authenticated route.
 
-**Why it matters**: A camera list, an identity review screen, and a map are three screens minimum. The router and a `RequireAuth` guard now exist (`frontend/src/App.tsx`), so adding those screens is additive, not a restructure.
+**Why it matters**: A camera list, an identity review screen, and a map are three screens minimum, and they need one consistent place to switch between them from.
 
-**Next step**: Add the screens themselves, and a shared nav/shell once there's more than one authenticated screen to switch between. Tracked as item 2.
+**Next step**: None; this closes once item 2's screens existed to nav between.
 
 ## 4. No frame/embedding retention or garbage collection — fixed
 
@@ -36,13 +36,13 @@ This is a backlog, not a committed roadmap like docs/PRD.md §10. Pulling an ite
 
 **Next step**: Retention is global-only for now, not per-camera (docs/PRD.md §11's per-camera half is still open, revisit if a real deployment needs it). Video segments themselves aren't retained yet at all (only frame crops), so there's nothing there for GC to prune until that's built.
 
-## 5. No real-time push or alerting
+## 5. No real-time push or alerting — fixed
 
-**Gap**: The map UI polls `/map/activity` every 10s (ADR-0009). docs/PRD.md §4 explicitly calls real-time push alerting a non-goal for now: "reasonable follow-on once events are flowing reliably, not part of this scope." Events have been flowing reliably since Phase 3.
+**Gap**: The map UI polled `/map/activity` every 10s (ADR-0009) with nothing pushing sooner. docs/PRD.md §4 explicitly called real-time push alerting a non-goal for now: "reasonable follow-on once events are flowing reliably, not part of this scope." Events have been flowing reliably since Phase 3. docs/DECISIONS.md ADR-0012 closes this: `reid` publishes each new sighting to a Redis pub/sub channel, and the API's new `GET /events/stream` (SSE) forwards it to connected clients; the frontend's `LiveFeed` panel (`frontend/src/LiveFeed.tsx`, in the shared `Shell`) shows it as a scrolling log on every authenticated screen.
 
 **Why it matters**: "A known identity reappeared" is a core surveillance use case, and polling can't deliver it promptly or efficiently at any real camera count.
 
-**Next step**: Worth revisiting the Phase 4 non-goal now that it's true. Smallest version: a webhook/SSE feed off the same event stream the API already reads from Sighting; alerting rules (which identity, which camera) are a separate, later decision.
+**Next step**: This is a live *feed*, not alerting — no rule engine decides "notify someone when identity X shows up on camera Y." That's a separate, later decision if it's ever needed. `/map/activity`'s poll is unchanged; the SSE feed is additive since the map still needs a full snapshot on load.
 
 ## 6. No CI — partially fixed
 
@@ -54,11 +54,11 @@ This is a backlog, not a committed roadmap like docs/PRD.md §10. Pulling an ite
 
 ## 7. No privacy/compliance controls — partially fixed
 
-**Gap**: This system stores face/body embeddings and cross-camera movement history for identifiable people, with no consent flow. docs/PRD.md §7's Privacy NFR names the requirement. Two of three pieces are done: the audit-log piece (docs/DECISIONS.md ADR-0010, who queried which identity/sighting, written on `identity.get`/`list_sightings`/`merge`/`split`), and a deletion path (docs/DECISIONS.md ADR-0011): `DELETE /identities/{identity_id}` lets an operator erase one identity's data on demand (audit-logged as `identity.delete`), and the same logic runs automatically once an identity ages past the retention window (item 4).
+**Gap**: This system stores face/body embeddings and cross-camera movement history for identifiable people, with no consent flow. docs/PRD.md §7's Privacy NFR names the requirement. Three of four pieces are done: the audit-log write piece (docs/DECISIONS.md ADR-0010, who queried which identity/sighting, written on `identity.get`/`list_sightings`/`merge`/`split`/`delete`), a deletion path (docs/DECISIONS.md ADR-0011): `DELETE /identities/{identity_id}` lets an operator erase one identity's data on demand, and the same logic runs automatically once an identity ages past the retention window (item 4); and the audit-log *read* piece: `GET /audit-log` and `frontend/src/AuditLogPage.tsx` mean it's no longer write-only.
 
 **Why it matters**: Called out in the PRD itself as the one requirement that "must be restricted... not just advisory." For a system that fingerprints people's movements, this is the gap most likely to cause real harm or legal exposure if it ships without it.
 
-**Next step**: A consent/enrollment flow is the remaining, bigger piece and needs its own design pass. No API endpoint exposes the audit log itself yet either, it's write-only for now.
+**Next step**: A consent/enrollment flow is the remaining piece and needs its own design pass — nothing here gates *collecting* someone's data on their consent, only what happens to it afterward.
 
 ## 8. No observability — partially fixed
 

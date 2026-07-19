@@ -1,0 +1,11 @@
+meta {
+  name: Stream sightings (SSE)
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{base_url}}/events/stream?token={{access_token}}
+  body: none
+  auth: none
+}

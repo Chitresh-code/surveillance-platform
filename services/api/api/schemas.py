@@ -148,3 +148,19 @@ class MapActivityOut(BaseModel):
 
 class MapActivityListOut(BaseModel):
     data: list[MapActivityOut]
+
+
+class AuditLogOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    operator_id: str
+    action: str
+    resource_type: str
+    resource_id: str
+    created_at: datetime
+
+
+class AuditLogListOut(BaseModel):
+    data: list[AuditLogOut]
+    next_cursor: str | None
