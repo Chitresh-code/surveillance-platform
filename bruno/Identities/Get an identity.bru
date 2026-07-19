@@ -1,0 +1,11 @@
+meta {
+  name: Get an identity
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{base_url}}/identities/{{identity_id}}
+  body: none
+  auth: inherit
+}

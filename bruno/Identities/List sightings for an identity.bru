@@ -1,0 +1,11 @@
+meta {
+  name: List sightings for an identity
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{base_url}}/identities/{{identity_id}}/sightings?limit=50
+  body: none
+  auth: inherit
+}

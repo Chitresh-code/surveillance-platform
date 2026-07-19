@@ -1,0 +1,9 @@
+{
+  "version": "1",
+  "name": "Surveillance Platform API",
+  "type": "collection",
+  "ignore": [
+    "node_modules",
+    ".git"
+  ]
+}

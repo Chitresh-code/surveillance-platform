@@ -1,0 +1,21 @@
+meta {
+  name: Merge identities
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{base_url}}/identities/{{identity_id}}/merge
+  body: json
+  auth: inherit
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "merge_identity_id": "{{merge_identity_id}}"
+  }
+}

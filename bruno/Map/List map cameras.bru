@@ -1,0 +1,11 @@
+meta {
+  name: List map cameras
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{base_url}}/map/cameras?limit=50
+  body: none
+  auth: inherit
+}

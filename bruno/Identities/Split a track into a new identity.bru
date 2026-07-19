@@ -1,0 +1,21 @@
+meta {
+  name: Split a track into a new identity
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{base_url}}/identities/{{identity_id}}/split
+  body: json
+  auth: inherit
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "track_id": "{{track_id}}"
+  }
+}

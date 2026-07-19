@@ -1,0 +1,11 @@
+meta {
+  name: Stop streaming
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{base_url}}/cameras/{{camera_id}}/stream/stop
+  body: none
+  auth: inherit
+}

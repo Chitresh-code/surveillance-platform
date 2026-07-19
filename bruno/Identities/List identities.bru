@@ -1,0 +1,11 @@
+meta {
+  name: List identities
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{base_url}}/identities?limit=50
+  body: none
+  auth: inherit
+}
