@@ -26,7 +26,4 @@ jobs:
       pull-requests: write
     steps:
       - uses: actions/checkout@v4
-      # ponytail: continue-on-error until the repo's Dependency graph setting is turned on
-      # (Settings > Security > Code security and analysis) — the action 400s without it.
       - uses: actions/dependency-review-action@v4
-        continue-on-error: true
