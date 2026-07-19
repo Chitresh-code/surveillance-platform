@@ -63,3 +63,40 @@ class DetectionOut(BaseModel):
 class DetectionListOut(BaseModel):
     data: list[DetectionOut]
     next_cursor: str | None
+
+
+class IdentityOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    first_seen: datetime
+    last_seen: datetime
+
+
+class IdentityListOut(BaseModel):
+    data: list[IdentityOut]
+    next_cursor: str | None
+
+
+class SightingOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    identity_id: str
+    track_id: str
+    camera_id: str
+    seen_at: datetime
+    match_confidence: float
+
+
+class SightingListOut(BaseModel):
+    data: list[SightingOut]
+    next_cursor: str | None
+
+
+class MergeRequest(BaseModel):
+    merge_identity_id: str
+
+
+class SplitRequest(BaseModel):
+    track_id: str
