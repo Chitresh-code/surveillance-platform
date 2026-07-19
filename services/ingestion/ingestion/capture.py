@@ -27,6 +27,13 @@ def frame_stream_key(camera_id: str) -> str:
     return f"frames:{camera_id}"
 
 
+def resolve_capture_source(stream_url: str) -> int | str:
+    # ponytail: a plain-digit stream_url ("0") means a local webcam device
+    # index, not a URL/filename; cv2.VideoCapture only treats it as a device
+    # if the argument is an int, so a bare string silently fails to open.
+    return int(stream_url) if stream_url.isdigit() else stream_url
+
+
 def build_frame_fields(frame) -> dict[str, bytes | str]:
     ok, buf = cv2.imencode(".jpg", frame)
     if not ok:
@@ -59,7 +66,7 @@ class CameraWorker:
         backoff = RECONNECT_BACKOFF_SECONDS
         min_frame_interval = 1.0 / self.target_fps
         while not self._stop_event.is_set():
-            capture = cv2.VideoCapture(self.stream_url)
+            capture = cv2.VideoCapture(resolve_capture_source(self.stream_url))
             if not capture.isOpened():
                 logger.warning("camera_id=%s could not open stream, retrying in %ss", self.camera_id, backoff)
                 capture.release()
