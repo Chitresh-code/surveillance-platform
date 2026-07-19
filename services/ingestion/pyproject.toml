@@ -1,0 +1,25 @@
+[project]
+name = "surveillance-ingestion"
+version = "0.1.0"
+description = "Connects to camera streams and pushes decoded frames onto the frame queue (docs/ARCHITECTURE.md)."
+requires-python = ">=3.12"
+dependencies = [
+    "opencv-python-headless>=5.0.0.93",
+    "redis>=8.0.1",
+    "surveillance-common>=0.1.0",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["ingestion*"]
+
+[tool.uv.sources]
+surveillance-common = { path = "../common", editable = true }
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+]
