@@ -44,13 +44,13 @@ This is a backlog, not a committed roadmap like docs/PRD.md §10. Pulling an ite
 
 **Next step**: Worth revisiting the Phase 4 non-goal now that it's true. Smallest version: a webhook/SSE feed off the same event stream the API already reads from Sighting; alerting rules (which identity, which camera) are a separate, later decision.
 
-## 6. No CI
+## 6. No CI — partially fixed
 
-**Gap**: docs/TESTING.md §4 already specifies CI expectations (unit+integration on every PR, pipeline/contract tests on merge to main), but no GitHub Actions workflow (or equivalent) actually runs them. Every test run in this project so far has been manual, `uv run pytest` by hand, per service.
+**Gap**: docs/TESTING.md §4 already specifies CI expectations (unit+integration on every PR, pipeline/contract tests on merge to main). `.github/workflows/test.yml` now covers the first half: unit+integration tests, matrix over `services/*`, on every PR and on push to `main`. Pipeline/replay and contract tests still aren't wired in, but neither exists in the repo yet either (docs/TESTING.md layers 3 and 4), so there's nothing to run yet.
 
-**Why it matters**: Nothing currently stops a PR that breaks another service's tests from merging. This gets worse, not better, the longer it's deferred, and it's cheap relative to everything else on this list.
+**Why it matters**: The part that mattered day to day, a PR silently breaking another service's tests, is closed. The remaining piece only matters once those test layers exist.
 
-**Next step**: A workflow per docs/TESTING.md §4's own layers: unit+integration per service on every PR (matrix over `services/*`), pipeline/replay and contract (`postman/` via `newman`) tests on merge to `main`.
+**Next step**: Add pipeline/replay and contract (`postman/` via `newman`) jobs to `.github/workflows/test.yml`, gated on merge to `main` per docs/TESTING.md §4, once those tests themselves are written.
 
 ## 7. No privacy/compliance controls
 
