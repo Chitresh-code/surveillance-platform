@@ -45,6 +45,11 @@ services:
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:-dev-only-change-me-to-a-random-32-byte-value}
     ports:
       - "8000:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     depends_on:
       metadata-db:
         condition: service_healthy
@@ -91,6 +96,22 @@ services:
       - frame-store:/data/frames:ro
     depends_on:
       frame-queue:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+  retention:
+    build:
+      context: .
+      dockerfile: services/retention/Dockerfile
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-surveillance}:${POSTGRES_PASSWORD:-surveillance}@metadata-db:5432/${POSTGRES_DB:-surveillance}
+      RETENTION_DAYS: ${RETENTION_DAYS:-90}
+      RETENTION_GC_INTERVAL_SECONDS: ${RETENTION_GC_INTERVAL_SECONDS:-86400}
+    volumes:
+      - frame-store:/data/frames
+    depends_on:
+      metadata-db:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully

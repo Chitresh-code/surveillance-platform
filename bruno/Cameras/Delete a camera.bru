@@ -1,0 +1,11 @@
+meta {
+  name: Delete a camera
+  type: http
+  seq: 8
+}
+
+delete {
+  url: {{base_url}}/cameras/{{camera_id}}
+  body: none
+  auth: inherit
+}

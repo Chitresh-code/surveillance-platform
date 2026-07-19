@@ -1,0 +1,11 @@
+meta {
+  name: Get a camera
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{base_url}}/cameras/{{camera_id}}
+  body: none
+  auth: inherit
+}

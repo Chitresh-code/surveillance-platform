@@ -1,0 +1,23 @@
+[project]
+name = "surveillance-retention"
+version = "0.1.0"
+description = "Deletes identities/tracks/detections/frame crops past the retention window (docs/DECISIONS.md ADR-0011)."
+requires-python = ">=3.12"
+dependencies = [
+    "surveillance-common>=0.1.0",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["retention*"]
+
+[tool.uv.sources]
+surveillance-common = { path = "../common", editable = true }
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+]

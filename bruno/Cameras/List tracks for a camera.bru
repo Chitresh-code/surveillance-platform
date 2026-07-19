@@ -1,0 +1,11 @@
+meta {
+  name: List tracks for a camera
+  type: http
+  seq: 7
+}
+
+get {
+  url: {{base_url}}/cameras/{{camera_id}}/tracks?limit=50
+  body: none
+  auth: inherit
+}

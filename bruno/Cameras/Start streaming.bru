@@ -1,0 +1,11 @@
+meta {
+  name: Start streaming
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{base_url}}/cameras/{{camera_id}}/stream/start
+  body: none
+  auth: inherit
+}

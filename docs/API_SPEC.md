@@ -1,6 +1,6 @@
 # API Specification
 
-This is the contract for the REST API described in docs/ARCHITECTURE.md. It's written ahead of implementation, so treat it as the target, not a description of existing code. Once endpoints are built, a Postman collection under `postman/` will mirror this document — if the two drift, this document wins and the collection gets fixed.
+This is the contract for the REST API described in docs/ARCHITECTURE.md. It's written ahead of implementation, so treat it as the target, not a description of existing code. Once endpoints are built, a Bruno collection under `bruno/` will mirror this document — if the two drift, this document wins and the collection gets fixed.
 
 ## 1. Conventions
 
@@ -11,7 +11,7 @@ This is the contract for the REST API described in docs/ARCHITECTURE.md. It's wr
 - List endpoints are paginated with `limit` (default 50, max 200) and `cursor` query params; responses include a `next_cursor` (`null` when there's no more data).
 - Filtering on list endpoints uses query params named after the field (`camera_id`, `identity_id`, `from`, `to`).
 - Errors use a consistent envelope (see §5) and standard HTTP status codes.
-- Every endpoint except `POST /auth/login` requires `Authorization: Bearer <token>` (docs/DECISIONS.md ADR-0010). A missing or invalid token gets a 401 with `error.code` of `unauthorized`.
+- Every endpoint except `POST /auth/login` and `GET /health` requires `Authorization: Bearer <token>` (docs/DECISIONS.md ADR-0010). A missing or invalid token gets a 401 with `error.code` of `unauthorized`. `GET /health` also sits outside the `/api/v1` base path (it isn't a versioned resource) — it's just `GET /health`.
 
 ## 2. Resources
 
@@ -59,6 +59,7 @@ This is the contract for the REST API described in docs/ARCHITECTURE.md. It's wr
 | GET | `/identities` | List known identities. |
 | GET | `/identities/{identity_id}` | Get one identity. |
 | GET | `/identities/{identity_id}/sightings` | List sightings for an identity across all cameras. |
+| DELETE | `/identities/{identity_id}` | Delete an identity and its tracks/detections/frame crops (docs/DECISIONS.md ADR-0011). |
 | POST | `/identities/{identity_id}/merge` | Merge another identity into this one (operator correction). |
 | POST | `/identities/{identity_id}/split` | Detach a track into a new identity (operator correction). |
 
@@ -75,6 +76,12 @@ This is the contract for the REST API described in docs/ARCHITECTURE.md. It's wr
 |---|---|---|
 | GET | `/map/cameras` | Camera locations plus current ingestion status, for map markers. |
 | GET | `/map/activity` | Recent sightings suitable for a map overlay (identity, camera, location, time). |
+
+### Health
+
+| Method | Path | Purpose |
+|---|---|---|
+| GET | `/health` | Liveness/readiness check: a DB round-trip. Unauthenticated, outside `/api/v1`. |
 
 ## 4. Example payloads
 
@@ -155,3 +162,4 @@ Breaking changes get a new base path (`/api/v2`); additive changes (new optional
 - Whether `Event` is a real stored table or a view computed from `Sighting` — implementation detail, doesn't change this contract either way.
 - Rate limiting on `/auth/login` and on API usage generally — not built yet (docs/DECISIONS.md ADR-0010's consequences).
 - Operator account management (create/list/deactivate operators via the API instead of the `create_operator` CLI script) — docs/GAPS.md item 2.
+- No API endpoint exposes the audit log itself yet (docs/GAPS.md item 7) — it's write-only from the API's perspective.

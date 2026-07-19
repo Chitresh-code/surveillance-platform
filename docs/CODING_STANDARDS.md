@@ -13,7 +13,7 @@ surveillance-platform/
 │   ├── reid/
 │   └── api/
 ├── frontend/             # map UI
-├── postman/              # API collection, kept in sync with docs/API_SPEC.md
+├── bruno/                # API collection, kept in sync with docs/API_SPEC.md
 ├── docker/                # shared docker/compose assets
 ├── docker-compose.yml
 └── README.md
@@ -31,7 +31,7 @@ Each service under `services/` is self-contained: its own dependency manifest, i
 
 - One PR per feature or fix, small enough to review in one sitting. If a PR description needs a table of contents, it's too big.
 - PR description states *why*, not a restatement of the diff — the diff already shows what changed.
-- A PR that touches `docs/API_SPEC.md` and adds/changes an endpoint must update `postman/` in the same PR.
+- A PR that touches `docs/API_SPEC.md` and adds/changes an endpoint must update `bruno/` in the same PR.
 - No PR merges with failing tests or with a new dependency that isn't justified in the description.
 
 ## 4. Naming & readability

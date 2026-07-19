@@ -107,3 +107,24 @@ def test_split_with_unrelated_track_returns_envelope_error(client):
     response = client.post(f"/api/v1/identities/{identity_id}/split", json={"track_id": "trk_missing"})
     assert response.status_code == 404
     assert response.json()["error"]["code"] == "sighting_not_found"
+
+
+def test_delete_identity_removes_it_and_its_track(client):
+    from common.db import session_scope
+    from common.models import Track
+
+    camera = _create_camera(client)
+    identity_id, track_id, _ = _insert_identity_with_sighting(camera["id"])
+
+    response = client.delete(f"/api/v1/identities/{identity_id}")
+    assert response.status_code == 204
+
+    assert client.get(f"/api/v1/identities/{identity_id}").status_code == 404
+    with session_scope() as session:
+        assert session.get(Track, track_id) is None
+
+
+def test_delete_missing_identity_returns_envelope_error(client):
+    response = client.delete("/api/v1/identities/idn_missing")
+    assert response.status_code == 404
+    assert response.json()["error"]["code"] == "identity_not_found"

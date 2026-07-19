@@ -1,0 +1,11 @@
+meta {
+  name: List detections for a track
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{base_url}}/tracks/{{track_id}}/detections?limit=50
+  body: none
+  auth: inherit
+}

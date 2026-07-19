@@ -3,12 +3,23 @@
 from fastapi import Depends, FastAPI
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
+from sqlalchemy.orm import Session
 
-from api.deps import current_operator
+from api.deps import current_operator, get_db
 from api.errors import APIError, api_error_handler, validation_error_handler
 from api.routers import auth, cameras, events, identities, map as map_router, tracks
 
 app = FastAPI(title="Surveillance Platform API")
+
+
+@app.get("/health")
+def health(session: Session = Depends(get_db)) -> dict:
+    """Unauthenticated liveness/readiness check (docs/GAPS.md item 8): a DB round-trip,
+    nothing versioned or resource-shaped, so it lives outside /api/v1.
+    """
+    session.execute(text("SELECT 1"))
+    return {"status": "ok"}
 
 # Wide open: bearer tokens (docs/DECISIONS.md ADR-0010) aren't sent automatically
 # by the browser cross-origin the way cookies are, so an open allowlist here

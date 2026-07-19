@@ -4,7 +4,7 @@ A multi-camera video surveillance platform. It ingests video from several camera
 
 ## Status
 
-Phase 1 (single camera: ingestion, detection, storage, minimal API), Phase 2 (multiple cameras, tracking within each), Phase 3 (cross-camera re-identification), and Phase 4 (map UI, full API surface, Postman collection, Docker deployment polish) are implemented. See the roadmap in [docs/PRD.md](docs/PRD.md) for what's planned and in what order, [docs/DECISIONS.md](docs/DECISIONS.md) for why each piece of the stack was chosen, and [docs/GAPS.md](docs/GAPS.md) for what's known to still be missing before this is production-ready (auth, a management dashboard, retention, and more).
+Phase 1 (single camera: ingestion, detection, storage, minimal API), Phase 2 (multiple cameras, tracking within each), Phase 3 (cross-camera re-identification), and Phase 4 (map UI, full API surface, Bruno collection, Docker deployment polish) are implemented. See the roadmap in [docs/PRD.md](docs/PRD.md) for what's planned and in what order, [docs/DECISIONS.md](docs/DECISIONS.md) for why each piece of the stack was chosen, and [docs/GAPS.md](docs/GAPS.md) for what's known to still be missing before this is production-ready (auth, a management dashboard, retention, and more).
 
 ## Services
 
@@ -15,6 +15,7 @@ Phase 1 (single camera: ingestion, detection, storage, minimal API), Phase 2 (mu
 | `services/detection` | Consumes frames, runs YOLOv8n person detection, tracks people within a camera with ByteTrack, stores detections/tracks and frame crops, publishes closed tracks for re-identification. |
 | `services/reid` | Consumes closed tracks, computes an appearance embedding for each, and matches or creates identities/sightings. |
 | `services/api` | FastAPI REST API over the metadata store, per [docs/API_SPEC.md](docs/API_SPEC.md). |
+| `services/retention` | Scheduled GC: deletes identities/tracks/detections and their frame crops past the retention window (docs/DECISIONS.md ADR-0011). |
 | `frontend` | React + Leaflet map UI: camera markers and recent-sighting overlay, a client of the REST API only. |
 
 ## Documentation
@@ -37,7 +38,7 @@ Requires Docker and Docker Compose. `.env.example` documents the Postgres creden
 docker compose up --build
 ```
 
-This brings up `metadata-db` (Postgres), `frame-queue` (Redis), a one-off `migrate` job that applies Alembic migrations, then `api`, `ingestion`, `detection`, `reid`, and `frontend`. The API is at `http://localhost:8000/api/v1`, the map UI at `http://localhost:5173`.
+This brings up `metadata-db` (Postgres), `frame-queue` (Redis), a one-off `migrate` job that applies Alembic migrations, then `api`, `ingestion`, `detection`, `reid`, `retention`, and `frontend`. The API is at `http://localhost:8000/api/v1`, the map UI at `http://localhost:5173`. `retention` runs in the background, deleting identities/tracks/detections (and their frame crops) older than `RETENTION_DAYS` (default 90) every `RETENTION_GC_INTERVAL_SECONDS` (default 24h) — see docs/DECISIONS.md ADR-0011. `GET /health` (no token needed) is a DB connectivity check, used as the `api` container's own healthcheck.
 
 Every endpoint except `POST /auth/login` requires a bearer token (docs/DECISIONS.md ADR-0010). Create an operator and log in:
 
@@ -66,7 +67,13 @@ curl http://localhost:8000/api/v1/identities -H "Authorization: Bearer $TOKEN"
 curl http://localhost:8000/api/v1/identities/{identity_id}/sightings -H "Authorization: Bearer $TOKEN"
 ```
 
-Operators can correct a matching mistake with `POST /api/v1/identities/{identity_id}/merge` (fold another identity into this one) or `POST /api/v1/identities/{identity_id}/split` (detach a track into a new identity). Full contract in [docs/API_SPEC.md](docs/API_SPEC.md).
+Operators can correct a matching mistake with `POST /api/v1/identities/{identity_id}/merge` (fold another identity into this one) or `POST /api/v1/identities/{identity_id}/split` (detach a track into a new identity), or erase one identity's data on demand with `DELETE /api/v1/identities/{identity_id}`:
+
+```sh
+curl -X DELETE http://localhost:8000/api/v1/identities/{identity_id} -H "Authorization: Bearer $TOKEN"
+```
+
+Full contract in [docs/API_SPEC.md](docs/API_SPEC.md).
 
 `GET /api/v1/events` gives the same sightings as a filterable, cross-camera feed (`camera_id`, `identity_id`, `from`, `to` query params); `GET /api/v1/map/cameras` and `GET /api/v1/map/activity` are what the map UI polls for markers and the recent-activity overlay:
 
@@ -89,7 +96,7 @@ npm run dev
 
 ### API collection
 
-[`postman/surveillance-platform.postman_collection.json`](postman/surveillance-platform.postman_collection.json) mirrors [docs/API_SPEC.md](docs/API_SPEC.md); import it into Postman, set the `base_url` collection variable if not running on the default port, and set `operator_username`/`operator_password` to an operator created with `api.create_operator`. Run the **Auth → Login** request first, it sets the `access_token` collection variable that every other request authenticates with.
+[`bruno/`](bruno/) mirrors [docs/API_SPEC.md](docs/API_SPEC.md); open it in the [Bruno](https://www.usebruno.com/) app (or run it headless with `npx @usebruno/cli run --env Local`), select the **Local** environment, and set `operator_username`/`operator_password` there to an operator created with `api.create_operator`. Run the **Auth → Login** request first, it sets the `access_token` variable that every other request authenticates with.
 
 ### Testing with your own camera
 

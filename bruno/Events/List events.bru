@@ -1,0 +1,18 @@
+meta {
+  name: List events
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{base_url}}/events?camera_id={{camera_id}}&identity_id={{identity_id}}
+  body: none
+  auth: inherit
+}
+
+params:query {
+  camera_id: {{camera_id}}
+  identity_id: {{identity_id}}
+  ~from: 
+  ~to: 
+}

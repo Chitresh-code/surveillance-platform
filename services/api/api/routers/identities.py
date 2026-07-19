@@ -1,6 +1,7 @@
 from common.ids import new_id
 from common.models import Identity, Sighting
 from common.pagination import DEFAULT_LIMIT
+from common.retention import delete_identity as purge_identity
 from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -50,6 +51,15 @@ def list_identity_sightings(
     stmt = select(Sighting).where(Sighting.identity_id == identity_id)
     rows, next_cursor = paginate(session, stmt, Sighting, Sighting.seen_at, limit, cursor)
     return {"data": rows, "next_cursor": next_cursor}
+
+
+@router.delete("/{identity_id}", status_code=204)
+def delete_identity(
+    identity_id: str, session: Session = Depends(get_db), operator: AuthenticatedOperator = Depends(current_operator)
+) -> None:
+    identity = _get_identity_or_404(session, identity_id)
+    purge_identity(session, identity)
+    log_audit(session, operator, "identity.delete", "identity", identity_id)
 
 
 @router.post("/{identity_id}/merge", response_model=IdentityOut)

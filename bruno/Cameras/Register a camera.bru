@@ -1,0 +1,30 @@
+meta {
+  name: Register a camera
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{base_url}}/cameras
+  body: json
+  auth: inherit
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "name": "Lobby North",
+    "lat": 12.9716,
+    "lon": 77.5946,
+    "stream_url": "rtsp://camera-host/lobby-north"
+  }
+}
+
+script:post-response {
+  if (res.status === 201) {
+    bru.setVar("camera_id", res.body.id);
+  }
+}
