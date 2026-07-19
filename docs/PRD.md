@@ -88,6 +88,8 @@ flowchart LR
 | 3 | Cross-camera re-identification. |
 | 4 | Map UI, full API surface, full test suite, Postman collection, Docker deployment polish. |
 
+Phase 4 is where this PRD's original scope ends. What's still missing before this could run as a real production system (auth, a management dashboard, retention, CI, and more) is tracked as a backlog in docs/GAPS.md rather than committed to a numbered phase here, since none of it has an ADR or a sequencing decision yet.
+
 ## 11. Open questions
 
 - Auth model for the API and map UI (operator accounts vs. API keys vs. both) — not yet decided, see docs/DECISIONS.md.
