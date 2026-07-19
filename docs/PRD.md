@@ -86,7 +86,7 @@ flowchart LR
 | 1 | Single camera: ingestion, detection, storage, minimal API. |
 | 2 | Multiple cameras + tracking within each. |
 | 3 | Cross-camera re-identification. |
-| 4 | Map UI, full API surface, full test suite, Postman collection, Docker deployment polish. |
+| 4 | Map UI, full API surface, full test suite, Bruno collection, Docker deployment polish. |
 
 Phase 4 is where this PRD's original scope ends. What's still missing before this could run as a real production system (auth, a management dashboard, retention, CI, and more) is tracked as a backlog in docs/GAPS.md rather than committed to a numbered phase here, since none of it has an ADR or a sequencing decision yet.
 
@@ -94,5 +94,5 @@ Phase 4 is where this PRD's original scope ends. What's still missing before thi
 
 - Auth model for the API and map UI (operator accounts vs. API keys vs. both) — not yet decided, see docs/DECISIONS.md.
 - Which object detector, tracker, and re-id embedding model to use — not yet decided, see docs/DECISIONS.md.
-- Video retention default (days) and whether it's per-camera or global.
+- ~~Video retention default (days) and whether it's per-camera or global.~~ Decided: 90 days, global (docs/DECISIONS.md ADR-0011); per-camera override still open if ever needed.
 - Whether non-person object classes (vehicles, bags) are in scope for a later phase.

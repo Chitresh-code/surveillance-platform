@@ -23,6 +23,8 @@ flowchart TB
     API --> BLOB
     UI[Map UI] --> API
     INT[External Integrators] --> API
+    GC[Retention / GC] --> DB
+    GC --> BLOB
 ```
 
 - **Ingestion Service** — connects to each camera's stream, normalizes frame rate/resolution, and pushes frames onto a queue per camera. Owns start/stop lifecycle for a camera's ingestion. A dropped camera connection is retried here and must not affect other cameras.
@@ -32,6 +34,7 @@ flowchart TB
 - **Object / Frame Store** — holds raw video segments and frame crops referenced by detections/tracks. Kept separate from the metadata store because it's large, cheap-per-byte, and has different retention rules than structured metadata.
 - **REST API** — the only supported way to read or write platform state from outside. See docs/API_SPEC.md for the contract. Talks to the metadata store and object store; never talks to cameras directly.
 - **Map UI** — a client of the REST API, nothing more. Renders camera locations and recent sightings.
+- **Retention / GC** — a scheduled process that deletes identities/tracks/detections and their frame crops once they're past the retention window (docs/DECISIONS.md ADR-0011). Talks directly to the metadata store and object store, same as the API, since it's the same "who's allowed to touch storage" boundary, not a request-serving one.
 
 ## 2. Data flow — one frame's journey
 
@@ -111,6 +114,7 @@ flowchart TB
         det[detection-worker x N]
         reid[reid-worker]
         api[api]
+        gc[retention]
         db[(metadata-db)]
         obj[(object-store)]
         mq[(frame-queue)]
@@ -123,6 +127,8 @@ flowchart TB
     api --> db
     api --> obj
     web --> api
+    gc --> db
+    gc --> obj
 ```
 
 Each box is a container; `detection-worker` is the one expected to scale out as camera count grows. `frame-queue` decouples ingestion from detection so a slow detection worker doesn't stall camera reads. Which concrete queue, database, and object store technology fill these roles is an open decision (docs/DECISIONS.md) — the topology doesn't depend on the choice.
@@ -137,7 +143,7 @@ Each box is a container; `detection-worker` is the one expected to scale out as 
 ## 6. Security & privacy
 
 - Video and biometric-like data (embeddings, face/body crops) are sensitive by default. The REST API is the single enforcement point for access control — nothing outside it talks to storage directly.
-- Retention limits (PRD NFR) must be enforced by a scheduled process, not left as a manual cleanup task.
+- Retention limits (PRD NFR) must be enforced by a scheduled process, not left as a manual cleanup task — implemented as the `retention` service (docs/DECISIONS.md ADR-0011).
 - Logs and metrics should reference record IDs, not embed raw frames or embeddings.
 
 ## 7. Stack status
