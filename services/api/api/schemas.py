@@ -100,3 +100,41 @@ class MergeRequest(BaseModel):
 
 class SplitRequest(BaseModel):
     track_id: str
+
+
+# Event is a denormalized read view over Sighting (docs/API_SPEC.md §2, §7), not a
+# separate stored resource, so its shape is Sighting's shape.
+EventOut = SightingOut
+
+
+class EventListOut(BaseModel):
+    data: list[EventOut]
+    next_cursor: str | None
+
+
+class MapCameraOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    name: str
+    lat: float
+    lon: float
+    status: str
+
+
+class MapCameraListOut(BaseModel):
+    data: list[MapCameraOut]
+    next_cursor: str | None
+
+
+class MapActivityOut(BaseModel):
+    id: str
+    identity_id: str
+    camera_id: str
+    lat: float
+    lon: float
+    seen_at: datetime
+
+
+class MapActivityListOut(BaseModel):
+    data: list[MapActivityOut]

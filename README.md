@@ -4,7 +4,7 @@ A multi-camera video surveillance platform. It ingests video from several camera
 
 ## Status
 
-Phase 1 (single camera: ingestion, detection, storage, minimal API), Phase 2 (multiple cameras, tracking within each), and Phase 3 (cross-camera re-identification) are implemented. The map UI (Phase 4) is next. See the roadmap in [docs/PRD.md](docs/PRD.md) for what's planned and in what order, and [docs/DECISIONS.md](docs/DECISIONS.md) for why each piece of the stack was chosen.
+Phase 1 (single camera: ingestion, detection, storage, minimal API), Phase 2 (multiple cameras, tracking within each), Phase 3 (cross-camera re-identification), and the map UI plus full API surface from Phase 4 are implemented. Postman collection and Docker deployment polish for the frontend are still open. See the roadmap in [docs/PRD.md](docs/PRD.md) for what's planned and in what order, and [docs/DECISIONS.md](docs/DECISIONS.md) for why each piece of the stack was chosen.
 
 ## Services
 
@@ -15,6 +15,7 @@ Phase 1 (single camera: ingestion, detection, storage, minimal API), Phase 2 (mu
 | `services/detection` | Consumes frames, runs YOLOv8n person detection, tracks people within a camera with ByteTrack, stores detections/tracks and frame crops, publishes closed tracks for re-identification. |
 | `services/reid` | Consumes closed tracks, computes an appearance embedding for each, and matches or creates identities/sightings. |
 | `services/api` | FastAPI REST API over the metadata store, per [docs/API_SPEC.md](docs/API_SPEC.md). |
+| `frontend` | React + Leaflet map UI: camera markers and recent-sighting overlay, a client of the REST API only. |
 
 ## Documentation
 
@@ -55,6 +56,25 @@ curl http://localhost:8000/api/v1/identities/{identity_id}/sightings
 ```
 
 Operators can correct a matching mistake with `POST /api/v1/identities/{identity_id}/merge` (fold another identity into this one) or `POST /api/v1/identities/{identity_id}/split` (detach a track into a new identity). Full contract in [docs/API_SPEC.md](docs/API_SPEC.md).
+
+`GET /api/v1/events` gives the same sightings as a filterable, cross-camera feed (`camera_id`, `identity_id`, `from`, `to` query params); `GET /api/v1/map/cameras` and `GET /api/v1/map/activity` are what the map UI polls for markers and the recent-activity overlay:
+
+```sh
+curl "http://localhost:8000/api/v1/events?camera_id={camera_id}"
+curl http://localhost:8000/api/v1/map/cameras
+curl http://localhost:8000/api/v1/map/activity
+```
+
+### Map UI
+
+The `frontend/` app is a Vite dev server, not yet wired into `docker-compose.yml`, so run it separately against the API started above:
+
+```sh
+cd frontend
+npm install
+cp .env.example .env.local   # VITE_API_BASE_URL, defaults to http://localhost:8000/api/v1
+npm run dev
+```
 
 ### Running tests locally
 
