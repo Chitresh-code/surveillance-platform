@@ -32,6 +32,8 @@ flowchart TB
 - Pipeline/replay and contract tests: run on merges to the main branch at minimum; can run per-PR once they're fast enough not to slow the loop down.
 - Load tests: manual or nightly, not part of the PR gate.
 
+No CI workflow implements this yet, tests are run by hand today; tracked in docs/GAPS.md.
+
 ## 5. What this suite doesn't cover
 
 Model accuracy (detector precision/recall, re-id false-match rate) is a model evaluation concern, tracked against the success metrics in docs/PRD.md §9, not a pass/fail unit test. Don't encode a specific accuracy number as a test assertion — it belongs in an evaluation report, not in CI.
