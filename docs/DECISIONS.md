@@ -64,6 +64,16 @@ Format: **Status**, **Context**, **Decision**, **Consequences**.
 
 **Consequences**: At single-camera, single-host scale, a networked object store adds a dependency (MinIO/S3 credentials, bucket lifecycle config) nothing yet needs; nothing requires two processes on two hosts to see the same frame crop. This is explicitly a Phase 1-only decision: the moment detection-worker containers scale across hosts (Phase 2/3, per docs/ARCHITECTURE.md §4's `detection-worker x N`), local disk stops working and this ADR gets superseded by an object-store ADR, flagged now so it isn't a surprise later.
 
+## ADR-0007: Within-camera tracking: Ultralytics BYTETracker
+
+**Status**: Accepted
+
+**Context**: Phase 2 (docs/PRD.md §10) adds FR-3's tracking half: associating per-frame person detections into continuous per-subject tracks within one camera, instead of Phase 1's placeholder of one Track row per streaming session. The detection service already loads `ultralytics` for the detector (ADR-0004) and already runs on CPU-only targets.
+
+**Decision**: `ultralytics.trackers.BYTETracker`, driven directly (not through the `model.track()` video-source API, which assumes it owns the capture loop) by calling `tracker.update(results.boxes, frame)` once per frame inside the detection worker, with one tracker instance per camera for that worker's lifetime.
+
+**Consequences**: `ultralytics` already ships BYTETracker and its config (`bytetrack.yaml`), so this adds no tracking-specific dependency beyond `lap`, the linear-assignment solver BYTETracker's own matching step needs, itself a small package with no further pulled-in weight. ByteTrack is IoU/Kalman-filter based, not an embedding model, so it stays CPU-fast and doesn't conflict with the Phase 1 CPU-only constraint. Calling `update()` directly, per frame, fits the existing architecture where the detection worker (not `ultralytics`) owns the frame loop, reading from Redis rather than a video source. Tracker-assigned ids are integers scoped to one in-process tracker instance, not the persistent `trk_` ids the API returns, so the detection worker maps local id to database Track id itself and that mapping does not survive a worker restart: a track still open when the worker restarts is not resumed, it is orphaned open in the database. Track-loss handling here also closes a Track the moment the tracker's per-frame output drops it, rather than waiting out ByteTrack's own lost-track buffer, so a briefly-occluded subject can show up as two Track rows instead of one; both are noted as known simplifications to revisit if track fragmentation turns out to matter in practice. If accuracy on real footage needs appearance matching (not just motion/IoU), this ADR gets revisited with BoT-SORT, which `ultralytics` also ships.
+
 ## How to add an ADR
 
 Copy the format above. Number sequentially (`ADR-0001`, `ADR-0002`, ...). Status starts as *Proposed* until agreed, then *Accepted* (or *Rejected*, left in the log either way, since rejected paths are useful context for whoever asks "why not X" later).
