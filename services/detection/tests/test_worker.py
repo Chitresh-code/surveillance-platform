@@ -43,10 +43,11 @@ def _frame_fields(captured_at: datetime) -> dict:
 
 
 def test_worker_opens_and_closes_a_track_as_the_tracker_id_appears_and_disappears(tmp_path):
+    redis_client = _NoopRedis()
     worker = DetectionWorker(
         camera_id="cam_test",
         model=_fake_model(),
-        redis_client=_NoopRedis(),
+        redis_client=redis_client,
         frame_store_dir=str(tmp_path),
         consumer_name="test-worker",
     )
@@ -79,7 +80,15 @@ def test_worker_opens_and_closes_a_track_as_the_tracker_id_appears_and_disappear
         # sqlite (test-only; production is Postgres per ADR-0002) doesn't round-trip tzinfo
         assert track.ended_at.replace(tzinfo=timezone.utc) == t3
 
+    assert redis_client.published == [("tracks:ready", {"track_id": track_id})]
+
 
 class _NoopRedis:
+    def __init__(self) -> None:
+        self.published: list[tuple[str, dict]] = []
+
     def xack(self, *args, **kwargs) -> None:
         pass
+
+    def xadd(self, stream_key: str, fields: dict) -> None:
+        self.published.append((stream_key, fields))

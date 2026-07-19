@@ -77,6 +77,21 @@ services:
       migrate:
         condition: service_completed_successfully
 
+  reid:
+    build:
+      context: .
+      dockerfile: services/reid/Dockerfile
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-surveillance}:${POSTGRES_PASSWORD:-surveillance}@metadata-db:5432/${POSTGRES_DB:-surveillance}
+      REDIS_URL: redis://frame-queue:6379/0
+    volumes:
+      - frame-store:/data/frames:ro
+    depends_on:
+      frame-queue:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
 volumes:
   pg-data:
   frame-store:
