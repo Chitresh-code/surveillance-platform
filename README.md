@@ -4,7 +4,7 @@ A multi-camera video surveillance platform. It ingests video from several camera
 
 ## Status
 
-Phase 1 (single camera: ingestion, detection, storage, minimal API), Phase 2 (multiple cameras, tracking within each), Phase 3 (cross-camera re-identification), and the map UI plus full API surface from Phase 4 are implemented. Postman collection and Docker deployment polish for the frontend are still open. See the roadmap in [docs/PRD.md](docs/PRD.md) for what's planned and in what order, and [docs/DECISIONS.md](docs/DECISIONS.md) for why each piece of the stack was chosen.
+Phase 1 (single camera: ingestion, detection, storage, minimal API), Phase 2 (multiple cameras, tracking within each), Phase 3 (cross-camera re-identification), and Phase 4 (map UI, full API surface, Postman collection, Docker deployment polish) are implemented. See the roadmap in [docs/PRD.md](docs/PRD.md) for what's planned and in what order, and [docs/DECISIONS.md](docs/DECISIONS.md) for why each piece of the stack was chosen.
 
 ## Services
 
@@ -36,7 +36,7 @@ Requires Docker and Docker Compose. `.env.example` documents the Postgres creden
 docker compose up --build
 ```
 
-This brings up `metadata-db` (Postgres), `frame-queue` (Redis), a one-off `migrate` job that applies Alembic migrations, then `api`, `ingestion`, `detection`, and `reid`. The API is at `http://localhost:8000/api/v1`.
+This brings up `metadata-db` (Postgres), `frame-queue` (Redis), a one-off `migrate` job that applies Alembic migrations, then `api`, `ingestion`, `detection`, `reid`, and `frontend`. The API is at `http://localhost:8000/api/v1`, the map UI at `http://localhost:5173`.
 
 Register a camera and start streaming it:
 
@@ -67,7 +67,7 @@ curl http://localhost:8000/api/v1/map/activity
 
 ### Map UI
 
-The `frontend/` app is a Vite dev server, not yet wired into `docker-compose.yml`, so run it separately against the API started above:
+`docker compose up --build` builds and serves `frontend/` at `http://localhost:5173` (nginx serving the Vite production build, API base URL baked in at build time via the `VITE_API_BASE_URL` build arg). For local dev with hot reload instead:
 
 ```sh
 cd frontend
@@ -75,6 +75,10 @@ npm install
 cp .env.example .env.local   # VITE_API_BASE_URL, defaults to http://localhost:8000/api/v1
 npm run dev
 ```
+
+### API collection
+
+[`postman/surveillance-platform.postman_collection.json`](postman/surveillance-platform.postman_collection.json) mirrors [docs/API_SPEC.md](docs/API_SPEC.md); import it into Postman and set the `base_url` collection variable if not running on the default port.
 
 ### Running tests locally
 
