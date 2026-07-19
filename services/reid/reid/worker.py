@@ -6,11 +6,13 @@ so one consumer group on the shared `tracks:ready` stream is enough. A bad track
 not take down the worker (docs/CODING_STANDARDS.md §5).
 """
 
+import json
 import logging
 
 import cv2
 import redis
 from common.db import session_scope
+from common.events import SIGHTINGS_CHANNEL
 from common.ids import new_id
 from common.models import Detection, Identity, Sighting, Track
 from sqlalchemy import select
@@ -51,6 +53,7 @@ class ReidWorker:
 
     def _process_message(self, message_id: bytes, fields: dict) -> None:
         track_id = fields[b"track_id"].decode()
+        sighting_event = None
         try:
             with session_scope() as session:
                 track = session.get(Track, track_id)
@@ -101,6 +104,15 @@ class ReidWorker:
                         match_confidence=match_confidence,
                     )
                 )
+                sighting_event = {
+                    "identity_id": identity.id,
+                    "camera_id": track.camera_id,
+                    "track_id": track.id,
+                    "seen_at": seen_at.isoformat(),
+                    "match_confidence": match_confidence,
+                }
+            if sighting_event is not None:
+                self.redis_client.publish(SIGHTINGS_CHANNEL, json.dumps(sighting_event))
         except Exception:
             logger.exception("track_id=%s failed to match identity", track_id)
         finally:

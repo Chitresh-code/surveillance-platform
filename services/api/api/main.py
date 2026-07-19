@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from api.deps import current_operator, get_db
 from api.errors import APIError, api_error_handler, validation_error_handler
-from api.routers import auth, cameras, events, identities, map as map_router, tracks
+from api.routers import audit, auth, cameras, events, events_stream, identities, map as map_router, tracks
 
 app = FastAPI(title="Surveillance Platform API")
 
@@ -36,6 +36,10 @@ app.add_exception_handler(RequestValidationError, validation_error_handler)
 
 API_V1 = "/api/v1"
 app.include_router(auth.router, prefix=API_V1)
+# Unprotected (query-param token auth, see api/routers/events_stream.py) and registered
+# before events.router so its literal "/events/stream" path isn't shadowed by
+# events.router's "/events/{event_id}".
+app.include_router(events_stream.router, prefix=API_V1)
 
 _protected = [Depends(current_operator)]
 app.include_router(cameras.router, prefix=API_V1, dependencies=_protected)
@@ -43,3 +47,4 @@ app.include_router(tracks.router, prefix=API_V1, dependencies=_protected)
 app.include_router(identities.router, prefix=API_V1, dependencies=_protected)
 app.include_router(events.router, prefix=API_V1, dependencies=_protected)
 app.include_router(map_router.router, prefix=API_V1, dependencies=_protected)
+app.include_router(audit.router, prefix=API_V1, dependencies=_protected)
