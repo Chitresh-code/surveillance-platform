@@ -22,17 +22,19 @@ export function Login() {
   return (
     <div className="login">
       <form className="login-form" onSubmit={handleSubmit}>
-        <h1>Surveillance Platform</h1>
+        <h1>
+          &gt;_ Surveillance Platform<span className="cursor" />
+        </h1>
         <label>
-          Username
+          username
           <input value={username} onChange={(event) => setUsername(event.target.value)} autoFocus />
         </label>
         <label>
-          Password
+          password
           <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} />
         </label>
         {error && <span className="login-error">{error}</span>}
-        <button type="submit">Log in</button>
+        <button type="submit">Authenticate</button>
       </form>
     </div>
   )
