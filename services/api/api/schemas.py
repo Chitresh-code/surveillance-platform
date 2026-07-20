@@ -109,7 +109,35 @@ class LoginRequest(BaseModel):
 
 class TokenOut(BaseModel):
     access_token: str
+    refresh_token: str
     token_type: str = "bearer"
+
+
+class RefreshRequest(BaseModel):
+    refresh_token: str
+
+
+class LogoutRequest(BaseModel):
+    refresh_token: str
+
+
+class OperatorCreate(BaseModel):
+    username: str
+    password: str
+
+
+class OperatorOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    username: str
+    is_active: bool
+    created_at: datetime
+
+
+class OperatorListOut(BaseModel):
+    data: list[OperatorOut]
+    next_cursor: str | None
 
 
 # Event is a denormalized read view over Sighting (docs/API_SPEC.md §2, §7), not a
