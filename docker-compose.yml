@@ -46,6 +46,8 @@ services:
       REDIS_URL: redis://frame-queue:6379/0
     ports:
       - "8000:8000"
+    volumes:
+      - frame-store:/data/frames:ro
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 10s

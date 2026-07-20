@@ -36,6 +36,59 @@ def test_protected_endpoint_rejects_bad_token():
     assert response.json()["error"]["code"] == "unauthorized"
 
 
+def test_login_issues_a_refresh_token_alongside_the_access_token(client):
+    response = client.post("/api/v1/auth/login", json={"username": TEST_USERNAME, "password": TEST_PASSWORD})
+    assert response.status_code == 200
+    assert response.json()["refresh_token"]
+
+
+def test_refresh_rotates_the_token_and_rejects_reuse(client):
+    login = client.post("/api/v1/auth/login", json={"username": TEST_USERNAME, "password": TEST_PASSWORD})
+    old_refresh_token = login.json()["refresh_token"]
+
+    refreshed = client.post("/api/v1/auth/refresh", json={"refresh_token": old_refresh_token})
+    assert refreshed.status_code == 200
+    new_refresh_token = refreshed.json()["refresh_token"]
+    assert new_refresh_token != old_refresh_token
+
+    reused = client.post("/api/v1/auth/refresh", json={"refresh_token": old_refresh_token})
+    assert reused.status_code == 401
+    assert reused.json()["error"]["code"] == "unauthorized"
+
+    still_good = client.post("/api/v1/auth/refresh", json={"refresh_token": new_refresh_token})
+    assert still_good.status_code == 200
+
+
+def test_refresh_rejects_an_unknown_token(client):
+    response = client.post("/api/v1/auth/refresh", json={"refresh_token": "not-a-real-refresh-token"})
+    assert response.status_code == 401
+
+
+def test_logout_revokes_the_refresh_token(client):
+    login = client.post("/api/v1/auth/login", json={"username": TEST_USERNAME, "password": TEST_PASSWORD})
+    refresh_token = login.json()["refresh_token"]
+
+    logout = client.post("/api/v1/auth/logout", json={"refresh_token": refresh_token})
+    assert logout.status_code == 204
+
+    response = client.post("/api/v1/auth/refresh", json={"refresh_token": refresh_token})
+    assert response.status_code == 401
+
+
+def test_login_rate_limits_after_too_many_failed_attempts(client, fake_redis):
+    from api.ratelimit import MAX_ATTEMPTS
+
+    username = "rate-limit-test-user"
+    for _ in range(MAX_ATTEMPTS):
+        pipe = fake_redis.pipeline()
+        pipe.incr(f"login_rl:user:{username}")
+        pipe.execute()
+
+    response = client.post("/api/v1/auth/login", json={"username": username, "password": "wrong"})
+    assert response.status_code == 429
+    assert response.json()["error"]["code"] == "rate_limited"
+
+
 def test_identity_get_writes_an_audit_log_entry(client):
     from common.db import session_scope
     from common.models import AuditLog, Identity

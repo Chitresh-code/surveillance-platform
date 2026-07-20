@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { deleteCamera, fetchMapCameras, login, subscribeToSightings } from './api'
-import { clearToken, getToken, setToken } from './auth'
+import { clearToken, getRefreshToken, getToken, setRefreshToken, setToken } from './auth'
 
 function jsonResponse(status: number, body: unknown): Response {
   return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
@@ -38,21 +38,62 @@ describe('api.ts auth behavior', () => {
     expect(headers.Authorization).toBeUndefined()
   })
 
-  it('stores the token returned by a successful login', async () => {
-    vi.mocked(fetch).mockResolvedValue(jsonResponse(200, { access_token: 'new-token', token_type: 'bearer' }))
+  it('stores the access and refresh tokens returned by a successful login', async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      jsonResponse(200, { access_token: 'new-token', refresh_token: 'new-refresh-token', token_type: 'bearer' })
+    )
 
     await login('operator1', 'correct-password')
 
     expect(getToken()).toBe('new-token')
+    expect(getRefreshToken()).toBe('new-refresh-token')
   })
 
-  it('clears the token and redirects to /login on a 401', async () => {
+  it('clears the token and redirects to /login on a 401 with no refresh token stored', async () => {
     setToken('stale-token')
     vi.mocked(fetch).mockResolvedValue(jsonResponse(401, { error: { code: 'unauthorized', message: 'nope' } }))
 
     await expect(fetchMapCameras()).rejects.toThrow()
 
     expect(getToken()).toBeNull()
+    expect(location.assign).toHaveBeenCalledWith('/login')
+  })
+
+  it('refreshes the access token and retries once after a 401, when a refresh token is stored', async () => {
+    setToken('stale-token')
+    setRefreshToken('refresh-token-abc')
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(jsonResponse(401, { error: { code: 'unauthorized', message: 'expired' } }))
+      .mockResolvedValueOnce(
+        jsonResponse(200, { access_token: 'fresh-token', refresh_token: 'fresh-refresh-token', token_type: 'bearer' })
+      )
+      .mockResolvedValueOnce(jsonResponse(200, { data: ['ok'] }))
+
+    const result = await fetchMapCameras()
+
+    expect(result).toEqual({ data: ['ok'] })
+    expect(getToken()).toBe('fresh-token')
+    expect(getRefreshToken()).toBe('fresh-refresh-token')
+    expect(location.assign).not.toHaveBeenCalled()
+
+    const [refreshUrl] = vi.mocked(fetch).mock.calls[1]
+    expect(refreshUrl).toContain('/auth/refresh')
+    const [, retryInit] = vi.mocked(fetch).mock.calls[2]
+    const retryHeaders = (retryInit?.headers ?? {}) as Record<string, string>
+    expect(retryHeaders.Authorization).toBe('Bearer fresh-token')
+  })
+
+  it('clears tokens and redirects to /login when the refresh attempt itself fails', async () => {
+    setToken('stale-token')
+    setRefreshToken('bad-refresh-token')
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(jsonResponse(401, { error: { code: 'unauthorized', message: 'expired' } }))
+      .mockResolvedValueOnce(jsonResponse(401, { error: { code: 'unauthorized', message: 'invalid refresh token' } }))
+
+    await expect(fetchMapCameras()).rejects.toThrow()
+
+    expect(getToken()).toBeNull()
+    expect(getRefreshToken()).toBeNull()
     expect(location.assign).toHaveBeenCalledWith('/login')
   })
 

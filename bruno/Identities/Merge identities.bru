@@ -19,3 +19,7 @@ body:json {
     "merge_identity_id": "{{merge_identity_id}}"
   }
 }
+
+assert {
+  res.status: eq 200
+}

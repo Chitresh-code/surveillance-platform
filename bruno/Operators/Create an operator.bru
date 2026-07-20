@@ -1,11 +1,11 @@
 meta {
-  name: Register a camera
+  name: Create an operator
   type: http
   seq: 1
 }
 
 post {
-  url: {{base_url}}/cameras
+  url: {{base_url}}/operators
   body: json
   auth: inherit
 }
@@ -16,16 +16,14 @@ headers {
 
 body:json {
   {
-    "name": "Lobby North",
-    "lat": 12.9716,
-    "lon": 77.5946,
-    "stream_url": "rtsp://camera-host/lobby-north"
+    "username": "bruno-contract-test-operator",
+    "password": "a-strong-password"
   }
 }
 
 script:post-response {
   if (res.status === 201) {
-    bru.setVar("camera_id", res.body.id);
+    bru.setVar("new_operator_id", res.body.id);
   }
 }
 

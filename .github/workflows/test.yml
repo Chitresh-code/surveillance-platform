@@ -18,3 +18,96 @@ jobs:
           python-version: "3.12"
       - run: uv run pytest
         working-directory: services/${{ matrix.service }}
+
+  # Pipeline/replay tests (docs/TESTING.md layer 3): the real YOLO detector + ReID
+  # encoder, not mocked, so this downloads real model weights and is slower than the
+  # unit+integration layer above — merges to main only, per docs/TESTING.md §4.
+  pipeline-replay-test:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+      - run: uv run pytest
+        working-directory: tests/pipeline
+
+  # Contract tests (docs/TESTING.md layer 4): the bruno/ collection, via the bru CLI,
+  # against a real running stack — merges to main only, per docs/TESTING.md §4.
+  contract-test:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Start the API stack
+        run: docker compose up -d --build --wait metadata-db frame-queue migrate api
+
+      - name: Create the CI operator
+        run: docker compose exec -T api uv run python -m api.create_operator ci-operator ci-password
+
+      - name: Seed fixture data
+        run: |
+          docker compose exec -T api uv run python - <<'PY' >> "$GITHUB_ENV"
+          from datetime import datetime, timezone
+
+          from common.db import session_scope
+          from common.ids import new_id
+          from common.models import Camera, Detection, Identity, Sighting, Track
+
+          now = datetime.now(timezone.utc)
+          with session_scope() as session:
+              camera = Camera(id=new_id("cam"), name="Contract Test Camera", lat=0.0, lon=0.0, stream_url="0")
+              session.add(camera)
+              track = Track(id=new_id("trk"), camera_id=camera.id, started_at=now, ended_at=now)
+              session.add(track)
+              session.add(
+                  Detection(
+                      id=new_id("det"),
+                      track_id=track.id,
+                      captured_at=now,
+                      bounding_box={"x": 0, "y": 0, "w": 1, "h": 1},
+                      confidence=0.9,
+                  )
+              )
+              session.flush()
+              identity = Identity(id=new_id("idn"), first_seen=now, last_seen=now, embedding=[0.1, 0.2])
+              session.add(identity)
+              merge_identity = Identity(id=new_id("idn"), first_seen=now, last_seen=now, embedding=[0.3, 0.4])
+              session.add(merge_identity)
+              session.flush()
+              sighting = Sighting(
+                  id=new_id("sgt"),
+                  identity_id=identity.id,
+                  track_id=track.id,
+                  camera_id=camera.id,
+                  seen_at=now,
+                  match_confidence=0.9,
+              )
+              session.add(sighting)
+
+          print(f"camera_id={camera.id}")
+          print(f"track_id={track.id}")
+          print(f"identity_id={identity.id}")
+          print(f"merge_identity_id={merge_identity.id}")
+          print(f"event_id={sighting.id}")
+          PY
+
+      - name: Run the bruno collection against the live stack
+        working-directory: bruno
+        run: |
+          npx --yes @usebruno/cli run \
+            Auth Operators "Tracks & detections" Identities "Events/Get an event.bru" "Events/List events.bru" Map "Audit log" Health Cameras \
+            -r --env Local \
+            --env-var operator_username=ci-operator \
+            --env-var operator_password=ci-password \
+            --env-var camera_id="$camera_id" \
+            --env-var track_id="$track_id" \
+            --env-var identity_id="$identity_id" \
+            --env-var merge_identity_id="$merge_identity_id" \
+            --env-var event_id="$event_id"
+
+      - name: Tear down
+        if: always()
+        run: docker compose down -v

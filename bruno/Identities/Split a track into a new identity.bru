@@ -19,3 +19,7 @@ body:json {
     "track_id": "{{track_id}}"
   }
 }
+
+assert {
+  res.status: eq 200
+}

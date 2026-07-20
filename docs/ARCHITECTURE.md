@@ -150,6 +150,7 @@ Each box is a container; `detection-worker` is the one expected to scale out as 
 - Retention limits (PRD NFR) must be enforced by a scheduled process, not left as a manual cleanup task — implemented as the `retention` service (docs/DECISIONS.md ADR-0011).
 - Logs and metrics should reference record IDs, not embed raw frames or embeddings.
 - The audit log (who did what, to which identity) is queryable via `GET /audit-log`, not just written (docs/GAPS.md item 7); it's the durable record of operator actions, distinct from the best-effort live sighting feed (docs/DECISIONS.md ADR-0012).
+- Operator accounts are managed via the API (`/operators`, docs/GAPS.md item 2) rather than only a CLI script; `/auth/login` is rate limited and issues a revocable refresh token alongside the access token (docs/DECISIONS.md ADR-0013).
 
 ## 7. Stack status
 

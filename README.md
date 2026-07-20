@@ -38,9 +38,9 @@ Requires Docker and Docker Compose. `.env.example` documents the Postgres creden
 docker compose up --build
 ```
 
-This brings up `metadata-db` (Postgres), `frame-queue` (Redis), a one-off `migrate` job that applies Alembic migrations, then `api`, `ingestion`, `detection`, `reid`, `retention`, and `frontend`. The API is at `http://localhost:8000/api/v1`, the dashboard at `http://localhost:5173`. `retention` runs in the background, deleting identities/tracks/detections (and their frame crops) older than `RETENTION_DAYS` (default 90) every `RETENTION_GC_INTERVAL_SECONDS` (default 24h) — see docs/DECISIONS.md ADR-0011. `GET /health` (no token needed) is a DB connectivity check, used as the `api` container's own healthcheck. `reid` also publishes each new sighting to Redis, which `GET /events/stream` (SSE) forwards to the dashboard's live feed panel in real time (docs/DECISIONS.md ADR-0012).
+This brings up `metadata-db` (Postgres), `frame-queue` (Redis), a one-off `migrate` job that applies Alembic migrations, then `api`, `ingestion`, `detection`, `reid`, `retention`, and `frontend`. The API is at `http://localhost:8000/api/v1`, the dashboard at `http://localhost:5173`. `retention` runs in the background, deleting identities/tracks/detections (and their frame crops) older than `RETENTION_DAYS` (default 90) every `RETENTION_GC_INTERVAL_SECONDS` (default 24h) — see docs/DECISIONS.md ADR-0011. `GET /health` (no token needed) checks the metadata store, Redis, and the frame store, used as the `api` container's own healthcheck. `reid` also publishes each new sighting to Redis, which `GET /events/stream` (SSE) forwards to the dashboard's live feed panel in real time (docs/DECISIONS.md ADR-0012).
 
-Every endpoint except `POST /auth/login` requires a bearer token (docs/DECISIONS.md ADR-0010). Create an operator and log in:
+Every endpoint except `POST /auth/login`, `POST /auth/refresh`, and `POST /auth/logout` requires a bearer token (docs/DECISIONS.md ADR-0010). Bootstrap the first operator with the CLI script, then create further ones via the API:
 
 ```sh
 docker compose exec api uv run python -m api.create_operator alice a-strong-password
@@ -48,7 +48,13 @@ docker compose exec api uv run python -m api.create_operator alice a-strong-pass
 TOKEN=$(curl -s -X POST http://localhost:8000/api/v1/auth/login \
   -H "Content-Type: application/json" \
   -d '{"username": "alice", "password": "a-strong-password"}' | python3 -c "import sys, json; print(json.load(sys.stdin)['access_token'])")
+
+curl -X POST http://localhost:8000/api/v1/operators \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"username": "bob", "password": "another-strong-password"}'
 ```
+
+`/auth/login` also returns a `refresh_token` (7 day expiry) alongside the access token; `POST /auth/refresh` trades it for a fresh pair (rotating the refresh token) so a session doesn't have to hard-stop at the access token's 12h mark, and `POST /auth/logout` revokes one on demand. `/auth/login` is rate limited (10 failed attempts / 5 minutes, per IP and per username) — see docs/DECISIONS.md ADR-0013.
 
 Register a camera and start streaming it:
 

@@ -1,6 +1,10 @@
-"""Password hashing and JWT issuance/verification for operator auth (docs/DECISIONS.md ADR-0010)."""
+"""Password hashing and JWT issuance/verification for operator auth (docs/DECISIONS.md
+ADR-0010), plus opaque refresh token generation/hashing (docs/DECISIONS.md ADR-0013).
+"""
 
+import hashlib
 import os
+import secrets
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
@@ -8,6 +12,7 @@ import bcrypt
 import jwt
 
 ACCESS_TOKEN_TTL = timedelta(hours=12)
+REFRESH_TOKEN_TTL = timedelta(days=7)
 JWT_ALGORITHM = "HS256"
 
 
@@ -37,3 +42,13 @@ class AuthenticatedOperator:
 def decode_access_token(token: str) -> AuthenticatedOperator:
     payload = jwt.decode(token, os.environ["JWT_SECRET_KEY"], algorithms=[JWT_ALGORITHM])
     return AuthenticatedOperator(id=payload["sub"], username=payload["username"])
+
+
+def generate_refresh_token() -> str:
+    return secrets.token_urlsafe(32)
+
+
+def hash_refresh_token(token: str) -> str:
+    # ponytail: a fast hash, not bcrypt — this hashes a 256-bit random value, not a
+    # low-entropy user password, so there's no brute-force risk to slow down against.
+    return hashlib.sha256(token.encode()).hexdigest()

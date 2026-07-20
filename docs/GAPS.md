@@ -6,19 +6,19 @@ This is a backlog, not a committed roadmap like docs/PRD.md §10. Pulling an ite
 
 ## 1. No auth, API or UI — fixed
 
-**Gap**: The API had no token checking at all; `CORSMiddleware` was wide open. There was no login in the map UI either. docs/DECISIONS.md ADR-0010 closes this: `POST /auth/login` issues a JWT against a new `operators` table, and a `current_operator` FastAPI dependency gates every other endpoint, enforced once in `services/api/api/main.py` rather than per-route. The map UI now has a `/login` route (`frontend/src/Login.tsx`) and redirects there when unauthenticated or when a request 401s.
+**Gap**: The API had no token checking at all; `CORSMiddleware` was wide open. There was no login in the map UI either. docs/DECISIONS.md ADR-0010 closes this: `POST /auth/login` issues a JWT against a new `operators` table, and a `current_operator` FastAPI dependency gates every other endpoint, enforced once in `services/api/api/main.py` rather than per-route. The map UI now has a `/login` route (`frontend/src/Login.tsx`) and redirects there when unauthenticated or when a request 401s. docs/DECISIONS.md ADR-0013 closes the two gaps ADR-0010 deliberately left open: `POST /auth/login` also returns a 7-day refresh token (`POST /auth/refresh` renews the access token without re-entering credentials, `POST /auth/logout` revokes it early), and `/auth/login` is now rate limited (10 failed attempts / 5 minutes, per IP and per username, Redis-backed).
 
 **Why it matters**: This was the gap everything else sat behind. Every identity's movement history, every camera's `stream_url`, every merge/split correction was readable and writable by anyone on the network.
 
-**Next step**: No self-service signup or operator management exists yet, operators are created with `uv run python -m api.create_operator <username> <password>` (see item 2). No rate limiting on `/auth/login`, no refresh token (a session hard-expires at 12h).
+**Next step**: No self-service signup exists (see item 2 for operator account management, which is otherwise now closed). No password complexity rules. Deactivating an operator (item 2) doesn't revoke that operator's already-issued access or refresh tokens immediately, only blocks new logins/refreshes past that point — bounded by the access token's 12h TTL, not instant.
 
 ## 2. No management dashboard — mostly fixed
 
-**Gap**: Camera registration, stream start/stop, and identity merge/split only existed as raw API calls (curl/Bruno). `POST /identities/{id}/merge` and `/split` are explicitly "operator correction" endpoints per docs/API_SPEC.md §3, they exist *for* a human, and now have one: `frontend/src/CamerasPage.tsx` (register/edit/delete, stream start/stop) and `frontend/src/IdentitiesPage.tsx` (sightings review, merge/split/delete) are real screens, plus `frontend/src/AuditLogPage.tsx` for the read side of item 7. Operator account creation is still a CLI script (`api.create_operator`), not a screen — the API has no operator CRUD endpoints to build one against.
+**Gap**: Camera registration, stream start/stop, and identity merge/split only existed as raw API calls (curl/Bruno). `POST /identities/{id}/merge` and `/split` are explicitly "operator correction" endpoints per docs/API_SPEC.md §3, they exist *for* a human, and now have one: `frontend/src/CamerasPage.tsx` (register/edit/delete, stream start/stop) and `frontend/src/IdentitiesPage.tsx` (sightings review, merge/split/delete) are real screens, plus `frontend/src/AuditLogPage.tsx` for the read side of item 7. Operator account management (`POST/GET /operators`, `DELETE /operators/{id}` to deactivate) is now a real API, not just the `api.create_operator` CLI script — no dashboard screen calls it yet, though.
 
 **Why it matters**: Nobody could actually operate this system without reading the API spec and writing curl commands. The whole point of FR-6 (operator corrections) is a human catching a bad match, which requires a UI to review sightings in the first place.
 
-**Next step**: Operator account management is the one piece left: no `POST/GET/DELETE /operators` endpoints exist, so there's nothing for a screen to call yet (docs/API_SPEC.md §7). Not built now since it wasn't part of this batch and needs its own endpoint design first.
+**Next step**: An operator-management *screen* (the API exists, docs/API_SPEC.md's Operators section) is the one piece left, and wasn't built since it wasn't asked for alongside the API this time.
 
 ## 3. UI is map-only, no landing page or navigation — fixed
 
@@ -44,13 +44,13 @@ This is a backlog, not a committed roadmap like docs/PRD.md §10. Pulling an ite
 
 **Next step**: This is a live *feed*, not alerting — no rule engine decides "notify someone when identity X shows up on camera Y." That's a separate, later decision if it's ever needed. `/map/activity`'s poll is unchanged; the SSE feed is additive since the map still needs a full snapshot on load.
 
-## 6. No CI — partially fixed
+## 6. No CI — fixed
 
-**Gap**: docs/TESTING.md §4 already specifies CI expectations (unit+integration on every PR, pipeline/contract tests on merge to main). `.github/workflows/test.yml` now covers the first half: unit+integration tests, matrix over `services/*`, on every PR and on push to `main`. Pipeline/replay and contract tests still aren't wired in, but neither exists in the repo yet either (docs/TESTING.md layers 3 and 4), so there's nothing to run yet. `.github/workflows/security.yml` (docs/DECISIONS.md ADR-0011) adds static security scanning (CodeQL, Dependency Review) on every PR, free on this repo's public GitHub tier.
+**Gap**: docs/TESTING.md §4 already specifies CI expectations (unit+integration on every PR, pipeline/contract tests on merge to main). `.github/workflows/test.yml` covers unit+integration tests (matrix over `services/*`, every PR and push to `main`), pipeline/replay tests (`tests/pipeline`, docs/TESTING.md layer 3: the real YOLO detector, BYTETracker, and ReID encoder — not the mocked models the unit-test layer deliberately uses — against synthetic, not real-footage, frames), and contract tests (docs/TESTING.md layer 4: the `bruno/` collection, via the `bru` CLI with `res.status` assertions added to every request, run against a real docker-compose stack seeded with fixture rows). The latter two are gated to push-to-`main` only, not every PR — real model downloads and a full stack bring-up are too slow for the per-PR loop (docs/TESTING.md §4 explicitly allows this). `.github/workflows/security.yml` (docs/DECISIONS.md ADR-0011) adds static security scanning (CodeQL, Dependency Review) on every PR, free on this repo's public GitHub tier.
 
-**Why it matters**: The part that mattered day to day, a PR silently breaking another service's tests, is closed. Security scanning catches a class of bug the test suite doesn't (known-vulnerable dependencies, common Python security anti-patterns). The remaining piece only matters once the pipeline/contract test layers exist.
+**Why it matters**: The part that mattered day to day, a PR silently breaking another service's tests, is closed. Security scanning catches a class of bug the test suite doesn't (known-vulnerable dependencies, common Python security anti-patterns). Pipeline/replay tests catch a class of bug the mocked unit tests structurally can't (a real `ultralytics`/`onnxruntime` API break, a missing model asset, an output-shape mismatch); contract tests catch the collection and docs/API_SPEC.md drifting apart in a way no per-service test suite would notice.
 
-**Next step**: Add pipeline/replay and contract (`bruno/` via the `bru` CLI) jobs to `.github/workflows/test.yml`, gated on merge to `main` per docs/TESTING.md §4, once those tests themselves are written.
+**Next step**: None open. Contract-test assertions check status codes, not full response-body shape — a deeper per-field contract check is a possible future tightening, not a gap that was asked for here.
 
 ## 7. No privacy/compliance controls — partially fixed
 
@@ -62,11 +62,11 @@ This is a backlog, not a committed roadmap like docs/PRD.md §10. Pulling an ite
 
 ## 8. No observability — partially fixed
 
-**Gap**: docs/PRD.md §7's Observability NFR calls for "enough logging/metrics to tell where a given sighting came from and why a match was made" at every pipeline stage. docs/CODING_STANDARDS.md §6 sets a structured-logging convention, and services do log, but nothing aggregates it, and there's no metrics/tracing. `GET /health` (docs/DECISIONS.md ADR-0011) now exists: an unauthenticated DB round-trip, wired up as the `api` container's Docker healthcheck.
+**Gap**: docs/PRD.md §7's Observability NFR calls for "enough logging/metrics to tell where a given sighting came from and why a match was made" at every pipeline stage. docs/CODING_STANDARDS.md §6 sets a structured-logging convention, and services do log, but nothing aggregates it, and there's no metrics/tracing. `GET /health` (docs/DECISIONS.md ADR-0011) now checks all three dependencies the API actually needs (metadata store, Redis, frame store — the `api` container now mounts the `frame-store` volume read-only just for this), not only the metadata store: `{"status": "ok"}` / 200 when all three round-trip cleanly, `{"status": "degraded", "checks": {...}}` / 503 (still wired up as the `api` container's Docker healthcheck) otherwise.
 
-**Why it matters**: There's no way to tell, today, whether `detection` is silently falling behind on a camera's frame rate, or whether a `reid` match was a near-miss or a confident hit, without reading raw container logs by hand. `/health` only answers "is the API up," not that broader question.
+**Why it matters**: There's no way to tell, today, whether `detection` is silently falling behind on a camera's frame rate, or whether a `reid` match was a near-miss or a confident hit, without reading raw container logs by hand. `/health` now answers "is everything the API itself depends on reachable," a step past "is the API process up," but still nothing about the other services (`detection`, `reid`, `ingestion`) or their throughput.
 
-**Next step**: Metrics/log aggregation is a bigger, genuinely optional-for-now piece; worth revisiting once there's more than one deployment to operate. `/health` also only checks the metadata store, not Redis or the frame store.
+**Next step**: Metrics/log aggregation is a bigger, genuinely optional-for-now piece — a new dependency (Prometheus/Grafana or similar) and its own ADR, not attempted here; worth revisiting once there's more than one deployment to operate.
 
 ## Related, already fixed
 
