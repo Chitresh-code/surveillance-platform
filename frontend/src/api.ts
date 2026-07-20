@@ -1,4 +1,4 @@
-import { clearToken, getToken, setToken } from './auth'
+import { clearToken, getRefreshToken, getToken, setRefreshToken, setToken } from './auth'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000/api/v1'
 
@@ -21,6 +21,7 @@ export interface MapActivity {
 
 export interface LoginResponse {
   access_token: string
+  refresh_token: string
   token_type: string
 }
 
@@ -71,6 +72,31 @@ function authHeaders(): Record<string, string> {
   return token ? { Authorization: `Bearer ${token}` } : {}
 }
 
+// ponytail: a session hard-expires at 12h (docs/DECISIONS.md ADR-0010) unless the
+// access token is silently renewed first — this is that renewal, tried once per
+// 401 before giving up and sending the operator back to /login (ADR-0013).
+async function refreshAccessToken(): Promise<boolean> {
+  const refreshToken = getRefreshToken()
+  if (!refreshToken) return false
+  const response = await fetch(`${API_BASE_URL}/auth/refresh`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ refresh_token: refreshToken }),
+  })
+  if (!response.ok) return false
+  const body: LoginResponse = await response.json()
+  setToken(body.access_token)
+  setRefreshToken(body.refresh_token)
+  return true
+}
+
+async function requestWithAuth(path: string, init: RequestInit): Promise<Response> {
+  const response = await fetch(`${API_BASE_URL}${path}`, { ...init, headers: { ...init.headers, ...authHeaders() } })
+  if (response.status !== 401) return response
+  if (!(await refreshAccessToken())) return response
+  return fetch(`${API_BASE_URL}${path}`, { ...init, headers: { ...init.headers, ...authHeaders() } })
+}
+
 async function handleResponse<T>(response: Response, path: string): Promise<T> {
   if (response.status === 401) {
     // ponytail: a hard redirect (not React state) so a 401 from a background
@@ -85,30 +111,30 @@ async function handleResponse<T>(response: Response, path: string): Promise<T> {
 }
 
 async function get<T>(path: string): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${path}`, { headers: authHeaders() })
+  const response = await requestWithAuth(path, {})
   return handleResponse<T>(response, path)
 }
 
 async function post<T>(path: string, body: unknown): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
+  const response = await requestWithAuth(path, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   })
   return handleResponse<T>(response, path)
 }
 
 async function patch<T>(path: string, body: unknown): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
+  const response = await requestWithAuth(path, {
     method: 'PATCH',
-    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   })
   return handleResponse<T>(response, path)
 }
 
 async function del(path: string): Promise<void> {
-  const response = await fetch(`${API_BASE_URL}${path}`, { method: 'DELETE', headers: authHeaders() })
+  const response = await requestWithAuth(path, { method: 'DELETE' })
   if (response.status === 401) {
     clearToken()
     window.location.assign('/login')
@@ -129,7 +155,22 @@ export function fetchMapActivity(): Promise<{ data: MapActivity[] }> {
 export async function login(username: string, password: string): Promise<LoginResponse> {
   const response = await post<LoginResponse>('/auth/login', { username, password })
   setToken(response.access_token)
+  setRefreshToken(response.refresh_token)
   return response
+}
+
+export async function logout(): Promise<void> {
+  const refreshToken = getRefreshToken()
+  if (refreshToken) {
+    // Best-effort: an operator who's about to lose their tokens either way
+    // shouldn't be blocked on the network round trip to revoke server-side.
+    fetch(`${API_BASE_URL}/auth/logout`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refresh_token: refreshToken }),
+    }).catch(() => {})
+  }
+  clearToken()
 }
 
 export function fetchCameras(): Promise<{ data: Camera[] }> {

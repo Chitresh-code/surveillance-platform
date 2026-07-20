@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
-import { clearToken, getUsername } from './auth'
+import { getUsername } from './auth'
+import { logout } from './api'
 import { LiveFeed } from './LiveFeed'
 
 const NAV_LINKS = [
@@ -14,7 +15,7 @@ export function Shell({ children }: { children: ReactNode }) {
   const navigate = useNavigate()
 
   function handleLogout() {
-    clearToken()
+    logout()
     navigate('/login', { replace: true })
   }
 
