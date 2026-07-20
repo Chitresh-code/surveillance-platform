@@ -15,3 +15,7 @@ params:query {
   resource_type: {{resource_type}}
   resource_id: {{identity_id}}
 }
+
+assert {
+  res.status: eq 200
+}

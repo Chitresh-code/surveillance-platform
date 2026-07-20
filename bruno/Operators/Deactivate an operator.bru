@@ -1,11 +1,11 @@
 meta {
-  name: Delete an identity
+  name: Deactivate an operator
   type: http
-  seq: 6
+  seq: 3
 }
 
 delete {
-  url: {{base_url}}/identities/{{identity_id}}
+  url: {{base_url}}/operators/{{new_operator_id}}
   body: none
   auth: inherit
 }
