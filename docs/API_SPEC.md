@@ -11,7 +11,7 @@ This is the contract for the REST API described in docs/ARCHITECTURE.md. It's wr
 - List endpoints are paginated with `limit` (default 50, max 200) and `cursor` query params; responses include a `next_cursor` (`null` when there's no more data).
 - Filtering on list endpoints uses query params named after the field (`camera_id`, `identity_id`, `from`, `to`).
 - Errors use a consistent envelope (see §5) and standard HTTP status codes.
-- Every endpoint except `POST /auth/login`, `GET /health`, and `GET /events/stream` requires `Authorization: Bearer <token>` (docs/DECISIONS.md ADR-0010). A missing or invalid token gets a 401 with `error.code` of `unauthorized`. `GET /health` also sits outside the `/api/v1` base path (it isn't a versioned resource) — it's just `GET /health`. `GET /events/stream` still requires a valid token, but as a `token` query param instead of a header (docs/DECISIONS.md ADR-0012).
+- Every endpoint except `POST /auth/login`, `POST /auth/refresh`, `POST /auth/logout`, `GET /health`, and `GET /events/stream` requires `Authorization: Bearer <token>` (docs/DECISIONS.md ADR-0010). A missing or invalid token gets a 401 with `error.code` of `unauthorized`. `GET /health` also sits outside the `/api/v1` base path (it isn't a versioned resource) — it's just `GET /health`. `GET /events/stream` still requires a valid token, but as a `token` query param instead of a header (docs/DECISIONS.md ADR-0012). `POST /auth/refresh` and `POST /auth/logout` take a refresh token in the request body instead — that's the credential, not a bearer header (docs/DECISIONS.md ADR-0013).
 
 ## 2. Resources
 
@@ -24,6 +24,7 @@ This is the contract for the REST API described in docs/ARCHITECTURE.md. It's wr
 | `Sighting` | A link between a track and an identity, with a match confidence. |
 | `Event` | A queryable, denormalized view over sightings for the API's read side. |
 | `AuditLog` | A record of an operator action against an identity (docs/GAPS.md item 7). |
+| `Operator` | An operator account (docs/GAPS.md item 2). |
 
 ## 3. Endpoints
 
@@ -31,7 +32,17 @@ This is the contract for the REST API described in docs/ARCHITECTURE.md. It's wr
 
 | Method | Path | Purpose |
 |---|---|---|
-| POST | `/auth/login` | Exchange an operator's username/password for a bearer token (12h expiry). The only endpoint that doesn't itself require one. |
+| POST | `/auth/login` | Exchange an operator's username/password for an access token (12h expiry) and a refresh token (7 day expiry). Rate limited (docs/DECISIONS.md ADR-0013): 10 failed attempts per 5 minutes, per IP and per username. The only endpoint that doesn't itself require a bearer token. |
+| POST | `/auth/refresh` | Exchange a refresh token for a new access token and a new refresh token (rotation — the old refresh token stops working). |
+| POST | `/auth/logout` | Revoke a refresh token on demand. |
+
+### Operators
+
+| Method | Path | Purpose |
+|---|---|---|
+| POST | `/operators` | Create an operator account. |
+| GET | `/operators` | List operator accounts. |
+| DELETE | `/operators/{operator_id}` | Deactivate an operator (soft delete — blocks future logins, doesn't revoke an already-issued access token; docs/GAPS.md item 2). |
 
 ### Cameras
 
@@ -82,7 +93,7 @@ This is the contract for the REST API described in docs/ARCHITECTURE.md. It's wr
 
 | Method | Path | Purpose |
 |---|---|---|
-| GET | `/health` | Liveness/readiness check: a DB round-trip. Unauthenticated, outside `/api/v1`. |
+| GET | `/health` | Liveness/readiness check: round-trips the metadata store, Redis, and the frame store. 200 `{"status": "ok"}` if all three are reachable, 503 `{"status": "degraded", "checks": {...}}` otherwise. Unauthenticated, outside `/api/v1`. |
 
 ### Audit log
 
@@ -149,6 +160,7 @@ Response:
 ```json
 {
   "access_token": "eyJhbGciOi...",
+  "refresh_token": "8f2c...",
   "token_type": "bearer"
 }
 ```
@@ -173,5 +185,5 @@ Breaking changes get a new base path (`/api/v2`); additive changes (new optional
 ## 7. Open items
 
 - Whether `Event` is a real stored table or a view computed from `Sighting` — implementation detail, doesn't change this contract either way.
-- Rate limiting on `/auth/login` and on API usage generally — not built yet (docs/DECISIONS.md ADR-0010's consequences).
-- Operator account management (create/list/deactivate operators via the API instead of the `create_operator` CLI script) — docs/GAPS.md item 2's remaining piece; no dashboard screen for it either.
+- Rate limiting on API usage generally (beyond `/auth/login`, which is covered by docs/DECISIONS.md ADR-0013) — not built.
+- Operator account management has an API (`/operators`, above) but no dashboard screen yet.

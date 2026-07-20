@@ -32,7 +32,7 @@ flowchart TB
 - Pipeline/replay and contract tests: run on merges to the main branch at minimum; can run per-PR once they're fast enough not to slow the loop down.
 - Load tests: manual or nightly, not part of the PR gate.
 
-`.github/workflows/test.yml` runs unit + integration tests (matrix over `services/*`) on every PR and on push to `main`. Pipeline/replay and contract tests aren't wired into CI yet since neither exists in the repo yet; add them to the workflow once they do (see docs/GAPS.md).
+`.github/workflows/test.yml` runs unit + integration tests (matrix over `services/*`) on every PR and on push to `main`. On push to `main` only (real model downloads and a full docker-compose stack make both too slow for the per-PR gate) it also runs `tests/pipeline` (layer 3, real models against synthetic frames) and a contract-test job (layer 4): brings up `metadata-db`/`frame-queue`/`migrate`/`api` via docker compose, creates an operator and a minimal set of fixture rows (one camera/track/detection/identity pair, since most of the API is scoped under a specific id), and runs the `bruno/` collection against it with the `bru` CLI, asserting `res.status` on every request. `Events/Stream sightings (SSE)` is excluded from that run — it's a long-lived connection by design (docs/DECISIONS.md ADR-0012) and would hang a batch run, so it stays a manual/interactive-only request in the collection.
 
 `.github/workflows/security.yml` adds static security scanning on every PR: CodeQL (Python) and `dependency-review-action`, both free on this repo's public GitHub tier (docs/DECISIONS.md ADR-0011). This is scanning, not a test layer above — it doesn't replace or gate on the layers in §2.
 

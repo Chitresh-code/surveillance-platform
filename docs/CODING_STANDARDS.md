@@ -14,12 +14,13 @@ surveillance-platform/
 │   └── api/
 ├── frontend/             # map UI
 ├── bruno/                # API collection, kept in sync with docs/API_SPEC.md
+├── tests/pipeline/       # cross-service pipeline/replay tests (docs/TESTING.md layer 3)
 ├── docker/                # shared docker/compose assets
 ├── docker-compose.yml
 └── README.md
 ```
 
-Each service under `services/` is self-contained: its own dependency manifest, its own tests, its own Dockerfile. Shared code between services only gets pulled into a common package once at least two services actually need it — not in anticipation of a third.
+Each service under `services/` is self-contained: its own dependency manifest, its own tests, its own Dockerfile. Shared code between services only gets pulled into a common package once at least two services actually need it — not in anticipation of a third. `tests/pipeline/` is the one deliberate exception: it tests the seam *between* `detection` and `reid` (docs/TESTING.md layer 3), so it isn't owned by either service, the same reasoning that puts `bruno/` at the root instead of inside `api/`.
 
 ## 2. Commits & branches
 
